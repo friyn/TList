@@ -13,7 +13,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'To-Do & Notes App',
+      title: 'To-Do, Notes & Finance App',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
@@ -23,7 +23,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Model untuk Task
+// Model untuk Task (tetap sama)
 class Task {
   String id;
   String title;
@@ -70,7 +70,7 @@ class Task {
   }
 }
 
-// Model untuk SubTask
+// Model untuk SubTask (tetap sama)
 class SubTask {
   String id;
   String title;
@@ -99,7 +99,7 @@ class SubTask {
   }
 }
 
-// Model untuk Note
+// Model untuk Note (tetap sama)
 class Note {
   String id;
   String title;
@@ -144,14 +144,62 @@ class Note {
   }
 }
 
-// Service untuk menyimpan data
+// Model untuk Transaction (BARU)
+class Transaction {
+  String id;
+  String title;
+  String description;
+  double amount;
+  String type; // 'income' atau 'expense'
+  String category;
+  DateTime createdAt;
+
+  Transaction({
+    required this.id,
+    required this.title,
+    this.description = '',
+    required this.amount,
+    required this.type,
+    required this.category,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'amount': amount,
+      'type': type,
+      'category': category,
+      'createdAt': createdAt.millisecondsSinceEpoch,
+    };
+  }
+
+  factory Transaction.fromJson(Map<String, dynamic> json) {
+    return Transaction(
+      id: json['id'],
+      title: json['title'],
+      description: json['description'] ?? '',
+      amount: (json['amount'] as num).toDouble(),
+      type: json['type'],
+      category: json['category'],
+      createdAt: DateTime.fromMillisecondsSinceEpoch(json['createdAt']),
+    );
+  }
+}
+
+// Service untuk menyimpan data (diperbarui)
 class DataService {
   static const String _tasksKey = 'todo_tasks';
   static const String _notesKey = 'notes';
+  static const String _transactionsKey = 'transactions';
   static const String _categoriesKey = 'todo_categories';
   static const String _noteCategoriesKey = 'note_categories';
+  static const String _incomeCategoriesKey = 'income_categories';
+  static const String _expenseCategoriesKey = 'expense_categories';
 
-  // Tasks
+  // Tasks (tetap sama)
   static Future<List<Task>> loadTasks() async {
     final prefs = await SharedPreferences.getInstance();
     final String? tasksJson = prefs.getString(_tasksKey);
@@ -167,7 +215,7 @@ class DataService {
     await prefs.setString(_tasksKey, tasksJson);
   }
 
-  // Notes
+  // Notes (tetap sama)
   static Future<List<Note>> loadNotes() async {
     final prefs = await SharedPreferences.getInstance();
     final String? notesJson = prefs.getString(_notesKey);
@@ -183,6 +231,22 @@ class DataService {
     await prefs.setString(_notesKey, notesJson);
   }
 
+  // Transactions (BARU)
+  static Future<List<Transaction>> loadTransactions() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? transactionsJson = prefs.getString(_transactionsKey);
+    if (transactionsJson == null) return [];
+
+    final List<dynamic> transactionsList = json.decode(transactionsJson);
+    return transactionsList.map((transaction) => Transaction.fromJson(transaction)).toList();
+  }
+
+  static Future<void> saveTransactions(List<Transaction> transactions) async {
+    final prefs = await SharedPreferences.getInstance();
+    final String transactionsJson = json.encode(transactions.map((transaction) => transaction.toJson()).toList());
+    await prefs.setString(_transactionsKey, transactionsJson);
+  }
+
   // Categories
   static Future<List<String>> loadTaskCategories() async {
     final prefs = await SharedPreferences.getInstance();
@@ -193,9 +257,19 @@ class DataService {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getStringList(_noteCategoriesKey) ?? ['Personal', 'Kerja', 'Ide', 'Catatan'];
   }
+
+  static Future<List<String>> loadIncomeCategories() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_incomeCategoriesKey) ?? ['Gaji', 'Freelance', 'Bonus', 'Investasi', 'Lainnya'];
+  }
+
+  static Future<List<String>> loadExpenseCategories() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_expenseCategoriesKey) ?? ['Makanan', 'Transport', 'Belanja', 'Tagihan', 'Hiburan', 'Kesehatan', 'Lainnya'];
+  }
 }
 
-// Main Screen dengan BottomNavigationBar
+// Main Screen dengan 3 tab (diperbarui)
 class MainScreen extends StatefulWidget {
   const MainScreen({Key? key}) : super(key: key);
 
@@ -208,7 +282,7 @@ class _MainScreenState extends State<MainScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
-  final List<String> _titles = ['To-Do List', 'My Notes'];
+  final List<String> _titles = ['To-Do List', 'My Notes', 'Keuangan'];
 
   @override
   Widget build(BuildContext context) {
@@ -222,7 +296,8 @@ class _MainScreenState extends State<MainScreen> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: _currentIndex == 0 ? 'Cari task...' : 'Cari note...',
+                hintText: _currentIndex == 0 ? 'Cari task...' : 
+                         _currentIndex == 1 ? 'Cari note...' : 'Cari transaksi...',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
@@ -256,6 +331,7 @@ class _MainScreenState extends State<MainScreen> {
         children: [
           TodoListScreen(searchQuery: _searchQuery),
           NotesScreen(searchQuery: _searchQuery),
+          FinanceScreen(searchQuery: _searchQuery), // Screen baru
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -266,7 +342,6 @@ class _MainScreenState extends State<MainScreen> {
         onTap: (index) {
           setState(() {
             _currentIndex = index;
-            // Clear search when switching tabs
             _searchController.clear();
             _searchQuery = '';
           });
@@ -282,6 +357,11 @@ class _MainScreenState extends State<MainScreen> {
             activeIcon: Icon(Icons.note),
             label: 'Notes',
           ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.account_balance_wallet_outlined),
+            activeIcon: Icon(Icons.account_balance_wallet),
+            label: 'Keuangan',
+          ),
         ],
       ),
     );
@@ -294,7 +374,605 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-// Todo List Screen
+// Finance Screen (BARU)
+class FinanceScreen extends StatefulWidget {
+  final String searchQuery;
+  
+  const FinanceScreen({Key? key, required this.searchQuery}) : super(key: key);
+
+  @override
+  State<FinanceScreen> createState() => _FinanceScreenState();
+}
+
+class _FinanceScreenState extends State<FinanceScreen> {
+  List<Transaction> transactions = [];
+  List<String> incomeCategories = [];
+  List<String> expenseCategories = [];
+  String selectedFilter = 'Semua'; // 'Semua', 'Pemasukan', 'Pengeluaran'
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final loadedTransactions = await DataService.loadTransactions();
+    final loadedIncomeCategories = await DataService.loadIncomeCategories();
+    final loadedExpenseCategories = await DataService.loadExpenseCategories();
+    
+    setState(() {
+      transactions = loadedTransactions;
+      incomeCategories = loadedIncomeCategories;
+      expenseCategories = loadedExpenseCategories;
+    });
+  }
+
+  Future<void> _saveTransactions() async {
+    await DataService.saveTransactions(transactions);
+  }
+
+  List<Transaction> get filteredTransactions {
+    var filtered = transactions;
+    
+    // Filter by type
+    if (selectedFilter == 'Pemasukan') {
+      filtered = filtered.where((t) => t.type == 'income').toList();
+    } else if (selectedFilter == 'Pengeluaran') {
+      filtered = filtered.where((t) => t.type == 'expense').toList();
+    }
+    
+    // Filter by search query
+    if (widget.searchQuery.isNotEmpty) {
+      filtered = filtered.where((transaction) =>
+          transaction.title.toLowerCase().contains(widget.searchQuery) ||
+          transaction.description.toLowerCase().contains(widget.searchQuery) ||
+          transaction.category.toLowerCase().contains(widget.searchQuery) ||
+          transaction.amount.toString().contains(widget.searchQuery)).toList();
+    }
+    
+    // Sort by date (newest first)
+    filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    
+    return filtered;
+  }
+
+  double get totalIncome {
+    return transactions
+        .where((t) => t.type == 'income')
+        .fold(0.0, (sum, t) => sum + t.amount);
+  }
+
+  double get totalExpense {
+    return transactions
+        .where((t) => t.type == 'expense')
+        .fold(0.0, (sum, t) => sum + t.amount);
+  }
+
+  double get balance => totalIncome - totalExpense;
+
+  void _addTransaction(String type) {
+    showDialog(
+      context: context,
+      builder: (context) => AddEditTransactionDialog(
+        type: type,
+        incomeCategories: incomeCategories,
+        expenseCategories: expenseCategories,
+        onSave: (transaction) {
+          setState(() {
+            transactions.add(transaction);
+          });
+          _saveTransactions();
+        },
+      ),
+    );
+  }
+
+  void _editTransaction(Transaction transaction) {
+    showDialog(
+      context: context,
+      builder: (context) => AddEditTransactionDialog(
+        transaction: transaction,
+        type: transaction.type,
+        incomeCategories: incomeCategories,
+        expenseCategories: expenseCategories,
+        onSave: (updatedTransaction) {
+          setState(() {
+            final index = transactions.indexWhere((t) => t.id == transaction.id);
+            if (index != -1) {
+              transactions[index] = updatedTransaction;
+            }
+          });
+          _saveTransactions();
+        },
+      ),
+    );
+  }
+
+  void _deleteTransaction(Transaction transaction) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hapus Transaksi'),
+        content: Text('Yakin ingin menghapus "${transaction.title}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                transactions.removeWhere((t) => t.id == transaction.id);
+              });
+              _saveTransactions();
+              Navigator.pop(context);
+            },
+            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          // Summary Cards
+          Container(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildSummaryCard(
+                    'Pemasukan',
+                    totalIncome,
+                    Colors.green,
+                    Icons.trending_up,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildSummaryCard(
+                    'Saldo',
+                    balance,
+                    balance >= 0 ? Colors.green : Colors.red,
+                    Icons.account_balance_wallet,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildSummaryCard(
+                    'Pengeluaran',
+                    totalExpense,
+                    Colors.red,
+                    Icons.trending_down,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Filter Chips
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Row(
+              children: [
+                FilterChip(
+                  label: const Text('Semua'),
+                  selected: selectedFilter == 'Semua',
+                  onSelected: (selected) {
+                    setState(() {
+                      selectedFilter = 'Semua';
+                    });
+                  },
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: const Text('Pemasukan'),
+                  selected: selectedFilter == 'Pemasukan',
+                  onSelected: (selected) {
+                    setState(() {
+                      selectedFilter = 'Pemasukan';
+                    });
+                  },
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: const Text('Pengeluaran'),
+                  selected: selectedFilter == 'Pengeluaran',
+                  onSelected: (selected) {
+                    setState(() {
+                      selectedFilter = 'Pengeluaran';
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 8),
+          
+          // Transactions List
+          Expanded(
+            child: filteredTransactions.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.receipt_outlined, size: 64, color: Colors.grey[400]),
+                        const SizedBox(height: 16),
+                        Text(
+                          widget.searchQuery.isNotEmpty
+                              ? 'Tidak ada transaksi yang cocok'
+                              : 'Belum ada transaksi',
+                          style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                        ),
+                        if (widget.searchQuery.isEmpty)
+                          Text(
+                            'Tap + untuk menambah transaksi baru',
+                            style: TextStyle(color: Colors.grey[500]),
+                          ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16.0),
+                    itemCount: filteredTransactions.length,
+                    itemBuilder: (context, index) {
+                      final transaction = filteredTransactions[index];
+                      return TransactionCard(
+                        transaction: transaction,
+                        onEdit: () => _editTransaction(transaction),
+                        onDelete: () => _deleteTransaction(transaction),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _addTransaction('income'),
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard(String title, double amount, Color color, IconData icon) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Rp ${amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Transaction Card Widget (BARU)
+class TransactionCard extends StatelessWidget {
+  final Transaction transaction;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const TransactionCard({
+    Key? key,
+    required this.transaction,
+    required this.onEdit,
+    required this.onDelete,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final isIncome = transaction.type == 'income';
+    
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4.0),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: isIncome ? Colors.green.shade100 : Colors.red.shade100,
+          child: Icon(
+            isIncome ? Icons.trending_up : Icons.trending_down,
+            color: isIncome ? Colors.green : Colors.red,
+          ),
+        ),
+        title: Text(
+          transaction.title,
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (transaction.description.isNotEmpty)
+              Text(transaction.description),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isIncome ? Colors.green.shade100 : Colors.red.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    transaction.category,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isIncome ? Colors.green.shade700 : Colors.red.shade700,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '${transaction.createdAt.day}/${transaction.createdAt.month}/${transaction.createdAt.year}',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ],
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '${isIncome ? '+' : '-'}Rp ${transaction.amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: isIncome ? Colors.green : Colors.red,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+            PopupMenuButton(
+              icon: const Icon(Icons.more_vert),
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  onTap: onEdit,
+                  child: const Row(
+                    children: [
+                      Icon(Icons.edit, size: 20),
+                      SizedBox(width: 8),
+                      Text('Edit'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  onTap: onDelete,
+                  child: const Row(
+                    children: [
+                      Icon(Icons.delete, color: Colors.red, size: 20),
+                      SizedBox(width: 8),
+                      Text('Hapus', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Dialog untuk Add/Edit Transaction (BARU)
+class AddEditTransactionDialog extends StatefulWidget {
+  final Transaction? transaction;
+  final String type; // 'income' atau 'expense'
+  final List<String> incomeCategories;
+  final List<String> expenseCategories;
+  final Function(Transaction) onSave;
+
+  const AddEditTransactionDialog({
+    Key? key,
+    this.transaction,
+    required this.type,
+    required this.incomeCategories,
+    required this.expenseCategories,
+    required this.onSave,
+  }) : super(key: key);
+
+  @override
+  State<AddEditTransactionDialog> createState() => _AddEditTransactionDialogState();
+}
+
+class _AddEditTransactionDialogState extends State<AddEditTransactionDialog> {
+  late TextEditingController _titleController;
+  late TextEditingController _descriptionController;
+  late TextEditingController _amountController;
+  late String _selectedCategory;
+  late String _transactionType;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.transaction?.title ?? '');
+    _descriptionController = TextEditingController(text: widget.transaction?.description ?? '');
+    _amountController = TextEditingController(text: widget.transaction?.amount.toString() ?? '');
+    _transactionType = widget.transaction?.type ?? widget.type;
+    
+    final categories = _transactionType == 'income' ? widget.incomeCategories : widget.expenseCategories;
+    _selectedCategory = widget.transaction?.category ?? categories.first;
+  }
+
+  void _save() {
+    if (_titleController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Judul transaksi tidak boleh kosong!')),
+      );
+      return;
+    }
+
+    final amount = double.tryParse(_amountController.text.trim());
+    if (amount == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Jumlah harus berupa angka yang valid!')),
+      );
+      return;
+    }
+
+    final transaction = Transaction(
+      id: widget.transaction?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      title: _titleController.text.trim(),
+      description: _descriptionController.text.trim(),
+      amount: amount,
+      type: _transactionType,
+      category: _selectedCategory,
+      createdAt: widget.transaction?.createdAt ?? DateTime.now(),
+    );
+
+    widget.onSave(transaction);
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final categories = _transactionType == 'income' ? widget.incomeCategories : widget.expenseCategories;
+    final isIncome = _transactionType == 'income';
+
+    return AlertDialog(
+      title: Text(
+        widget.transaction == null 
+            ? (isIncome ? 'Tambah Pemasukan' : 'Tambah Pengeluaran')
+            : (isIncome ? 'Edit Pemasukan' : 'Edit Pengeluaran')
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.transaction == null)
+                Row(
+                  children: [
+                    Expanded(
+                      child: RadioListTile<String>(
+                        dense: true,
+                        title: const Text('Pemasukan'),
+                        value: 'income',
+                        groupValue: _transactionType,
+                        onChanged: (value) {
+                          setState(() {
+                            _transactionType = value!;
+                            _selectedCategory = (value == 'income' ? widget.incomeCategories : widget.expenseCategories).first;
+                          });
+                        },
+                      ),
+                    ),
+                    Expanded(
+                      child: RadioListTile<String>(
+                        dense: true,
+                        title: const Text('Pengeluaran'),
+                        value: 'expense',
+                        groupValue: _transactionType,
+                        onChanged: (value) {
+                          setState(() {
+                            _transactionType = value!;
+                            _selectedCategory = (value == 'income' ? widget.incomeCategories : widget.expenseCategories).first;
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Judul Transaksi',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _amountController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Jumlah (Rp)',
+                  border: OutlineInputBorder(),
+                  prefixText: 'Rp ',
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Deskripsi (opsional)',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedCategory,
+                decoration: const InputDecoration(
+                  labelText: 'Kategori',
+                  border: OutlineInputBorder(),
+                ),
+                items: categories.map((category) {
+                  return DropdownMenuItem(
+                    value: category,
+                    child: Text(category),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedCategory = value!;
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Batal'),
+        ),
+        ElevatedButton(
+          onPressed: _save,
+          child: const Text('Simpan'),
+        ),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _amountController.dispose();
+    super.dispose();
+  }
+}
+
+// Todo List Screen (tetap sama seperti sebelumnya)
 class TodoListScreen extends StatefulWidget {
   final String searchQuery;
   
@@ -331,12 +1009,10 @@ class _TodoListScreenState extends State<TodoListScreen> {
   List<Task> get filteredTasks {
     var filtered = tasks;
     
-    // Filter by category
     if (selectedCategory != 'Semua') {
       filtered = filtered.where((task) => task.category == selectedCategory).toList();
     }
     
-    // Filter by search query
     if (widget.searchQuery.isNotEmpty) {
       filtered = filtered.where((task) =>
           task.title.toLowerCase().contains(widget.searchQuery) ||
@@ -442,31 +1118,35 @@ class _TodoListScreenState extends State<TodoListScreen> {
     return Scaffold(
       body: Column(
         children: [
-          // Category Filter
           Container(
-            padding: const EdgeInsets.all(8.0),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: categories.map((category) {
-                  final isSelected = selectedCategory == category;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8.0),
-                    child: FilterChip(
-                      label: Text(category),
-                      selected: isSelected,
-                      onSelected: (selected) {
-                        setState(() {
-                          selectedCategory = category;
-                        });
-                      },
+            padding: const EdgeInsets.only(top: 10, left: 8, right: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: categories.map((category) {
+                        final isSelected = selectedCategory == category;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: FilterChip(
+                            label: Text(category),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setState(() {
+                                selectedCategory = category;
+                              });
+                            },
+                          ),
+                        );
+                      }).toList(),
                     ),
-                  );
-                }).toList(),
-              ),
+                  ),
+                ),
+              ],
             ),
           ),
-          // Tasks List
           Expanded(
             child: filteredTasks.isEmpty
                 ? Center(
@@ -514,7 +1194,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
   }
 }
 
-// Notes Screen
+// Notes Screen (tetap sama seperti sebelumnya)
 class NotesScreen extends StatefulWidget {
   final String searchQuery;
   
@@ -552,12 +1232,10 @@ class _NotesScreenState extends State<NotesScreen> {
   List<Note> get filteredNotes {
     var filtered = notes;
     
-    // Filter by category
     if (selectedCategory != 'Semua') {
       filtered = filtered.where((note) => note.category == selectedCategory).toList();
     }
     
-    // Filter by search query
     if (widget.searchQuery.isNotEmpty) {
       filtered = filtered.where((note) =>
           note.title.toLowerCase().contains(widget.searchQuery) ||
@@ -565,7 +1243,6 @@ class _NotesScreenState extends State<NotesScreen> {
           note.category.toLowerCase().contains(widget.searchQuery)).toList();
     }
     
-    // Sort by updated date (newest first)
     filtered.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     
     return filtered;
@@ -636,7 +1313,6 @@ class _NotesScreenState extends State<NotesScreen> {
     return Scaffold(
       body: Column(
         children: [
-          // Category Filter & View Toggle
           Container(
             padding: const EdgeInsets.all(8.0),
             child: Row(
@@ -674,7 +1350,6 @@ class _NotesScreenState extends State<NotesScreen> {
               ],
             ),
           ),
-          // Notes List/Grid
           Expanded(
             child: filteredNotes.isEmpty
                 ? Center(
@@ -739,7 +1414,9 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 }
 
-// Widget untuk Task Card (sama seperti sebelumnya)
+// Widget components (TaskCard, NoteListCard, NoteGridCard, AddEditTaskDialog, AddEditNoteDialog)
+// [Sisanya tetap sama seperti kode asli...]
+
 class TaskCard extends StatelessWidget {
   final Task task;
   final VoidCallback onToggleComplete;
@@ -882,7 +1559,6 @@ class TaskCard extends StatelessWidget {
   }
 }
 
-// Widget untuk Note List Card
 class NoteListCard extends StatelessWidget {
   final Note note;
   final VoidCallback onTap;
@@ -956,7 +1632,6 @@ class NoteListCard extends StatelessWidget {
   }
 }
 
-// Widget untuk Note Grid Card
 class NoteGridCard extends StatelessWidget {
   final Note note;
   final VoidCallback onTap;
@@ -1039,7 +1714,6 @@ class NoteGridCard extends StatelessWidget {
   }
 }
 
-// Dialog untuk Add/Edit Task (sama seperti sebelumnya)
 class AddEditTaskDialog extends StatefulWidget {
   final Task? task;
   final List<String> categories;
@@ -1224,7 +1898,6 @@ class _AddEditTaskDialogState extends State<AddEditTaskDialog> {
   }
 }
 
-// Dialog untuk Add/Edit Note
 class AddEditNoteDialog extends StatefulWidget {
   final Note? note;
   final List<String> categories;
