@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
+// import 'package:tlist/page/login.dart';
+
 void main() {
   runApp(const MyApp());
 }
@@ -283,13 +285,24 @@ class _MainScreenState extends State<MainScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
-  final List<String> _titles = ['To-Do List', 'My Notes', 'Keuangan'];
+  final List<String> _titles = ['Tasks', 'Notes', 'Keuangan'];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_currentIndex]),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person),
+            onPressed: () {
+              // Navigator.push(
+              //   context,
+              //   MaterialPageRoute(builder: (context) => const LoginPage()),
+              // );
+            },
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(
@@ -338,7 +351,7 @@ class _MainScreenState extends State<MainScreen> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         type: BottomNavigationBarType.fixed,
-        selectedItemColor: Colors.blue,
+        selectedItemColor: const Color(0xFF128C7E),
         unselectedItemColor: Colors.grey,
         onTap: (index) {
           setState(() {
@@ -351,7 +364,7 @@ class _MainScreenState extends State<MainScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.check_circle_outline),
             activeIcon: Icon(Icons.check_circle),
-            label: 'To-Do',
+            label: 'Tasks',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.note_outlined),
@@ -869,38 +882,19 @@ class _AddEditTransactionDialogState extends State<AddEditTransactionDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (widget.transaction == null)
-                Row(
-                  children: [
-                    Expanded(
-                      child: RadioListTile<String>(
-                        dense: true,
-                        title: const Text('Pemasukan'),
-                        value: 'income',
-                        groupValue: _transactionType,
-                        onChanged: (value) {
-                          setState(() {
-                            _transactionType = value!;
-                            _selectedCategory = (value == 'income' ? widget.incomeCategories : widget.expenseCategories).first;
-                          });
-                        },
-                      ),
-                    ),
-                    Expanded(
-                      child: RadioListTile<String>(
-                        dense: true,
-                        title: const Text('Pengeluaran'),
-                        value: 'expense',
-                        groupValue: _transactionType,
-                        onChanged: (value) {
-                          setState(() {
-                            _transactionType = value!;
-                            _selectedCategory = (value == 'income' ? widget.incomeCategories : widget.expenseCategories).first;
-                          });
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+              DropdownButtonFormField<String>(
+                value: _transactionType,
+                items: const [
+                  DropdownMenuItem(child: Text('Pemasukan'), value: 'income'),
+                  DropdownMenuItem(child: Text('Pengeluaran'), value: 'expense'),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _transactionType = value!;
+                    _selectedCategory = (value == 'income' ? widget.incomeCategories : widget.expenseCategories).first;
+                  });
+                },
+              ),
               const SizedBox(height: 16),
               TextField(
                 controller: _titleController,
