@@ -34,11 +34,17 @@ class _RegisterPageState extends State<RegisterPage> {
         password: pass,
       );
       await cred.user?.updateDisplayName(name);
+      await cred.user?.sendEmailVerification();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registrasi berhasil')),
+        const SnackBar(
+          content: Text('Registrasi berhasil. Cek email untuk verifikasi sebelum login.'),
+          duration: Duration(seconds: 4),
+        ),
       );
-      Navigator.pop(context);
+      // Paksa sign out sampai email terverifikasi
+      await FirebaseAuth.instance.signOut();
+      Navigator.pop(context); // kembali ke login
     } on FirebaseAuthException catch (e) {
       final msg = _humanizeAuthError(e.code);
       ScaffoldMessenger.of(context).showSnackBar(

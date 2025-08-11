@@ -701,39 +701,50 @@ class _FinanceScreenState extends State<FinanceScreen> {
           
           // Transactions List
           Expanded(
-            child: filteredTransactions.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+            child: RefreshIndicator(
+              onRefresh: _loadData,
+              child: filteredTransactions.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
                       children: [
-                        Icon(Icons.receipt_outlined, size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          widget.searchQuery.isNotEmpty
-                              ? 'Tidak ada transaksi yang cocok'
-                              : 'Belum ada transaksi',
-                          style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                        ),
-                        if (widget.searchQuery.isEmpty)
-                          Text(
-                            'Tap + untuk menambah transaksi baru',
-                            style: TextStyle(color: Colors.grey[500]),
+                        const SizedBox(height: 120),
+                        Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.receipt_outlined, size: 64, color: Colors.grey[400]),
+                              const SizedBox(height: 16),
+                              Text(
+                                widget.searchQuery.isNotEmpty
+                                    ? 'Tidak ada transaksi yang cocok'
+                                    : 'Belum ada transaksi',
+                                style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                              ),
+                              if (widget.searchQuery.isEmpty)
+                                Text(
+                                  'Tap + untuk menambah transaksi baru',
+                                  style: TextStyle(color: Colors.grey[500]),
+                                ),
+                            ],
                           ),
+                        ),
                       ],
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
+                      itemCount: filteredTransactions.length,
+                      itemBuilder: (context, index) {
+                        final transaction = filteredTransactions[index];
+                        return TransactionCard(
+                          transaction: transaction,
+                          onEdit: () => _editTransaction(transaction),
+                          onDelete: () => _deleteTransaction(transaction),
+                        );
+                      },
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16.0),
-                    itemCount: filteredTransactions.length,
-                    itemBuilder: (context, index) {
-                      final transaction = filteredTransactions[index];
-                      return TransactionCard(
-                        transaction: transaction,
-                        onEdit: () => _editTransaction(transaction),
-                        onDelete: () => _deleteTransaction(transaction),
-                      );
-                    },
-                  ),
+            ),
           ),
         ],
       ),
@@ -1233,41 +1244,52 @@ class _TodoListScreenState extends State<TodoListScreen> {
             ),
           ),
           Expanded(
-            child: filteredTasks.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+            child: RefreshIndicator(
+              onRefresh: _loadData,
+              child: filteredTasks.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
                       children: [
-                        Icon(Icons.task_alt, size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          widget.searchQuery.isNotEmpty
-                              ? 'Tidak ada task yang cocok'
-                              : 'Belum ada task',
-                          style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                        ),
-                        if (widget.searchQuery.isEmpty)
-                          Text(
-                            'Tap + untuk menambah task baru',
-                            style: TextStyle(color: Colors.grey[500]),
+                        const SizedBox(height: 120),
+                        Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.task_alt, size: 64, color: Colors.grey[400]),
+                              const SizedBox(height: 16),
+                              Text(
+                                widget.searchQuery.isNotEmpty
+                                    ? 'Tidak ada task yang cocok'
+                                    : 'Belum ada task',
+                                style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                              ),
+                              if (widget.searchQuery.isEmpty)
+                                Text(
+                                  'Tap + untuk menambah task baru',
+                                  style: TextStyle(color: Colors.grey[500]),
+                                ),
+                            ],
                           ),
+                        ),
                       ],
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(8.0),
+                      itemCount: filteredTasks.length,
+                      itemBuilder: (context, index) {
+                        final task = filteredTasks[index];
+                        return TaskCard(
+                          task: task,
+                          onToggleComplete: () => _toggleTaskComplete(task),
+                          onToggleSubTaskComplete: (subTask) => _toggleSubTaskComplete(task, subTask),
+                          onEdit: () => _editTask(task),
+                          onDelete: () => _deleteTask(task),
+                        );
+                      },
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(8.0),
-                    itemCount: filteredTasks.length,
-                    itemBuilder: (context, index) {
-                      final task = filteredTasks[index];
-                      return TaskCard(
-                        task: task,
-                        onToggleComplete: () => _toggleTaskComplete(task),
-                        onToggleSubTaskComplete: (subTask) => _toggleSubTaskComplete(task, subTask),
-                        onEdit: () => _editTask(task),
-                        onDelete: () => _deleteTask(task),
-                      );
-                    },
-                  ),
+            ),
           ),
         ],
       ),
@@ -1436,58 +1458,70 @@ class _NotesScreenState extends State<NotesScreen> {
             ),
           ),
           Expanded(
-            child: filteredNotes.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+            child: RefreshIndicator(
+              onRefresh: _loadData,
+              child: filteredNotes.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
                       children: [
-                        Icon(Icons.note_outlined, size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          widget.searchQuery.isNotEmpty
-                              ? 'Tidak ada note yang cocok'
-                              : 'Belum ada note',
-                          style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                        ),
-                        if (widget.searchQuery.isEmpty)
-                          Text(
-                            'Tap + untuk menambah note baru',
-                            style: TextStyle(color: Colors.grey[500]),
+                        const SizedBox(height: 120),
+                        Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.note_outlined, size: 64, color: Colors.grey[400]),
+                              const SizedBox(height: 16),
+                              Text(
+                                widget.searchQuery.isNotEmpty
+                                    ? 'Tidak ada note yang cocok'
+                                    : 'Belum ada note',
+                                style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                              ),
+                              if (widget.searchQuery.isEmpty)
+                                Text(
+                                  'Tap + untuk menambah note baru',
+                                  style: TextStyle(color: Colors.grey[500]),
+                                ),
+                            ],
                           ),
-                      ],
-                    ),
-                  )
-                : isGridView
-                    ? GridView.builder(
-                        padding: const EdgeInsets.all(8.0),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 0.8,
-                          crossAxisSpacing: 8,
-                          mainAxisSpacing: 8,
                         ),
-                        itemCount: filteredNotes.length,
-                        itemBuilder: (context, index) {
-                          final note = filteredNotes[index];
-                          return NoteGridCard(
-                            note: note,
-                            onTap: () => _editNote(note),
-                            onDelete: () => _deleteNote(note),
-                          );
-                        },
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(8.0),
-                        itemCount: filteredNotes.length,
-                        itemBuilder: (context, index) {
-                          final note = filteredNotes[index];
-                          return NoteListCard(
-                            note: note,
-                            onTap: () => _editNote(note),
-                            onDelete: () => _deleteNote(note),
-                          );
-                        },
-                      ),
+                      ],
+                    )
+                  : isGridView
+                      ? GridView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(8.0),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            childAspectRatio: 0.8,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                          ),
+                          itemCount: filteredNotes.length,
+                          itemBuilder: (context, index) {
+                            final note = filteredNotes[index];
+                            return NoteGridCard(
+                              note: note,
+                              onTap: () => _editNote(note),
+                              onDelete: () => _deleteNote(note),
+                            );
+                          },
+                        )
+                      : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(8.0),
+                          itemCount: filteredNotes.length,
+                          itemBuilder: (context, index) {
+                            final note = filteredNotes[index];
+                            return NoteListCard(
+                              note: note,
+                              onTap: () => _editNote(note),
+                              onDelete: () => _deleteNote(note),
+                            );
+                          },
+                        ),
+            ),
           ),
         ],
       ),

@@ -25,6 +25,20 @@ class _LoginPageState extends State<LoginPage> {
         email: email,
         password: pass,
       );
+      final user = FirebaseAuth.instance.currentUser;
+      await user?.reload();
+      if (!(user?.emailVerified ?? false)) {
+        await user?.sendEmailVerification();
+        await FirebaseAuth.instance.signOut();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Email belum terverifikasi. Link verifikasi telah dikirim ulang.'),
+            duration: Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Login berhasil')),
@@ -55,6 +69,76 @@ class _LoginPageState extends State<LoginPage> {
       default:
         return 'Login gagal ($code)';
     }
+  }
+
+  Future<void> _forgotPassword() async {
+    final emailController = TextEditingController(text: _emailController.text.trim());
+    final formKey = GlobalKey<FormState>();
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Reset Password'),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Email terdaftar',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                final v = value?.trim() ?? '';
+                if (v.isEmpty) return 'Email tidak boleh kosong';
+                final emailRegex = RegExp(r'^.+@.+\..+$');
+                if (!emailRegex.hasMatch(v)) return 'Format email tidak valid';
+                return null;
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (!(formKey.currentState?.validate() ?? false)) return;
+                final email = emailController.text.trim();
+                try {
+                  await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Link reset password telah dikirim ke email.')),
+                    );
+                  }
+                } on FirebaseAuthException catch (e) {
+                  final msg = e.code == 'user-not-found'
+                      ? 'Email tidak terdaftar'
+                      : e.code == 'invalid-email'
+                          ? 'Email tidak valid'
+                          : 'Gagal mengirim email reset: ${e.code}';
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(msg)),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Terjadi kesalahan: $e')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Kirim Link'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -147,7 +231,7 @@ class _LoginPageState extends State<LoginPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text('Belum punya akun?'),
+                    const Text('Belum punya akun? '),
                     TextButton(
                       onPressed: () {
                         Navigator.push(
@@ -158,6 +242,11 @@ class _LoginPageState extends State<LoginPage> {
                         );
                       },
                       child: const Text('Daftar'),
+                    ),
+                    const Text(' | '),
+                    TextButton(
+                      onPressed: _forgotPassword,
+                      child: const Text('Lupa password?'),
                     ),
                   ],
                 ),

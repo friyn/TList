@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tlist/page/login.dart';
 import 'package:tlist/page/register.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 class UserPage extends StatelessWidget {
   const UserPage({super.key});
@@ -87,6 +88,148 @@ class UserPage extends StatelessWidget {
           subtitle: Text(email),
         ),
         const Divider(),
+        if (!(user.emailVerified))
+          ListTile(
+            leading: const Icon(Icons.mark_email_unread_outlined),
+            title: const Text('Kirim ulang verifikasi email'),
+            onTap: () async {
+              try {
+                final acs = kIsWeb
+                    ? ActionCodeSettings(
+                        url: '${Uri.base.origin}/verified',
+                        handleCodeInApp: false,
+                      )
+                    : null;
+                if (acs != null) {
+                  await user.sendEmailVerification(acs);
+                } else {
+                  await user.sendEmailVerification();
+                }
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Email verifikasi dikirim')), 
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Gagal kirim verifikasi: $e')),
+                  );
+                }
+              }
+            },
+          ),
+        ListTile(
+          leading: const Icon(Icons.person_outline),
+          title: const Text('Ganti nama tampil'),
+          onTap: () async {
+            final name = await _prompt(context, title: 'Nama tampil baru', hint: 'Nama lengkap');
+            if (name == null || name.trim().isEmpty) return;
+            try {
+              await user.updateDisplayName(name.trim());
+              await user.reload();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Nama tampil diperbarui')),
+                );
+              }
+            } catch (e) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Gagal ganti nama: $e')),
+                );
+              }
+            }
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.alternate_email),
+          title: const Text('Ganti email'),
+          subtitle: const Text('Butuh verifikasi ulang, Anda akan keluar'),
+          onTap: () async {
+            final currentPass = await _prompt(context, title: 'Konfirmasi Password', hint: 'Password saat ini', obscure: true);
+            if (currentPass == null || currentPass.isEmpty) return;
+            final newEmail = await _prompt(context, title: 'Email baru', hint: 'nama@domain.com');
+            if (newEmail == null || newEmail.trim().isEmpty) return;
+            try {
+              final emailNow = user.email;
+              if (emailNow == null) throw Exception('Email akun tidak tersedia');
+              final cred = EmailAuthProvider.credential(email: emailNow, password: currentPass);
+              await user.reauthenticateWithCredential(cred);
+              final newAddr = newEmail.trim();
+              final acs = kIsWeb
+                  ? ActionCodeSettings(
+                      url: '${Uri.base.origin}/verified',
+                      handleCodeInApp: false,
+                    )
+                  : null;
+              if (acs != null) {
+                await user.verifyBeforeUpdateEmail(newAddr, acs);
+              } else {
+                await user.verifyBeforeUpdateEmail(newAddr);
+              }
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Verifikasi telah dikirim ke email baru. Selesaikan verifikasi lalu login kembali.')),
+                );
+              }
+              await FirebaseAuth.instance.signOut();
+            } on FirebaseAuthException catch (e) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Gagal ganti email: ${e.code}')),
+                );
+              }
+            } catch (e) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Gagal ganti email: $e')),
+                );
+              }
+            }
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.lock_outline),
+          title: const Text('Ganti password'),
+          onTap: () async {
+            final currentPass = await _prompt(context, title: 'Password saat ini', hint: 'Password', obscure: true);
+            if (currentPass == null || currentPass.isEmpty) return;
+            final newPass = await _prompt(context, title: 'Password baru', hint: 'Minimal 6 karakter', obscure: true);
+            if (newPass == null || newPass.length < 6) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Password baru minimal 6 karakter')),
+                );
+              }
+              return;
+            }
+            try {
+              final emailNow = user.email;
+              if (emailNow == null) throw Exception('Email akun tidak tersedia');
+              final cred = EmailAuthProvider.credential(email: emailNow, password: currentPass);
+              await user.reauthenticateWithCredential(cred);
+              await user.updatePassword(newPass);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Password berhasil diubah')),
+                );
+              }
+            } on FirebaseAuthException catch (e) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Gagal ganti password: ${e.code}')),
+                );
+              }
+            } catch (e) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Gagal ganti password: $e')),
+                );
+              }
+            }
+          },
+        ),
         ListTile(
           leading: const Icon(Icons.logout),
           title: const Text('Keluar'),
@@ -101,6 +244,40 @@ class UserPage extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  Future<String?> _prompt(
+    BuildContext context, {
+    required String title,
+    required String hint,
+    bool obscure = false,
+  }) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: TextField(
+            controller: controller,
+            obscureText: obscure,
+            decoration: InputDecoration(hintText: hint),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    return result;
   }
 
 }

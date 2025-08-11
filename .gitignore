@@ -52,3 +52,4 @@ firebase-debug.log
 .firebase
 .github
 firebaseconfig.js
+lib/firebase_options.dart
