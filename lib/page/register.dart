@@ -1,42 +1,45 @@
 import 'package:flutter/material.dart';
-import 'package:tlist/page/register.dart';
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+class RegisterPage extends StatefulWidget {
+  const RegisterPage({super.key});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<RegisterPage> createState() => _RegisterPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _obscure = true;
+  final _confirmController = TextEditingController();
+
+  bool _obscurePass = true;
+  bool _obscureConfirm = true;
 
   void _submit() {
-    if (_formKey.currentState?.validate() ?? false) {
-      FocusScope.of(context).unfocus();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Login berhasil')),
-      );
-      // TODO: Integrasikan dengan auth/routing bila diperlukan.
-    }
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    FocusScope.of(context).unfocus();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Registrasi berhasil')),
+    );
+    // TODO: Integrasikan ke backend/auth jika dibutuhkan
+    Navigator.pop(context); // kembali ke login
   }
 
   @override
   void dispose() {
+    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Login'),
-      ),
+      appBar: AppBar(title: const Text('Daftar')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -54,13 +57,29 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Welcome to TList!',
+                  'Buat Akun TList',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                 ),
                 const SizedBox(height: 24),
+                TextFormField(
+                  controller: _nameController,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'Nama Lengkap',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                  validator: (value) {
+                    final v = (value ?? '').trim();
+                    if (v.isEmpty) return 'Nama tidak boleh kosong';
+                    if (v.length < 3) return 'Nama terlalu pendek';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -72,7 +91,7 @@ class _LoginPageState extends State<LoginPage> {
                     prefixIcon: Icon(Icons.email_outlined),
                   ),
                   validator: (value) {
-                    final v = value?.trim() ?? '';
+                    final v = (value ?? '').trim();
                     if (v.isEmpty) return 'Email tidak boleh kosong';
                     final emailRegex = RegExp(r'^.+@.+\..+$');
                     if (!emailRegex.hasMatch(v)) return 'Format email tidak valid';
@@ -82,17 +101,16 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _passwordController,
-                  obscureText: _obscure,
-                  textInputAction: TextInputAction.done,
-                  onFieldSubmitted: (_) => _submit(),
+                  obscureText: _obscurePass,
+                  textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
                     labelText: 'Password',
                     border: const OutlineInputBorder(),
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                      icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
-                      tooltip: _obscure ? 'Tampilkan' : 'Sembunyikan',
+                      onPressed: () => setState(() => _obscurePass = !_obscurePass),
+                      icon: Icon(_obscurePass ? Icons.visibility : Icons.visibility_off),
+                      tooltip: _obscurePass ? 'Tampilkan' : 'Sembunyikan',
                     ),
                   ),
                   validator: (value) {
@@ -102,29 +120,45 @@ class _LoginPageState extends State<LoginPage> {
                     return null;
                   },
                 ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _confirmController,
+                  obscureText: _obscureConfirm,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _submit(),
+                  decoration: InputDecoration(
+                    labelText: 'Konfirmasi Password',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                      icon: Icon(_obscureConfirm ? Icons.visibility : Icons.visibility_off),
+                      tooltip: _obscureConfirm ? 'Tampilkan' : 'Sembunyikan',
+                    ),
+                  ),
+                  validator: (value) {
+                    final v = value ?? '';
+                    if (v.isEmpty) return 'Konfirmasi password tidak boleh kosong';
+                    if (v != _passwordController.text) return 'Password tidak cocok';
+                    return null;
+                  },
+                ),
                 const SizedBox(height: 24),
                 ElevatedButton(
                   onPressed: _submit,
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size.fromHeight(48),
                   ),
-                  child: const Text('Login'),
+                  child: const Text('Daftar'),
                 ),
                 const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text('Belum punya akun?'),
+                    const Text('Sudah punya akun?'),
                     TextButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const RegisterPage(),
-                          ),
-                        );
-                      },
-                      child: const Text('Daftar'),
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Login'),
                     ),
                   ],
                 ),
