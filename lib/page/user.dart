@@ -45,7 +45,7 @@ class UserPage extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         const Text(
-          'You are not sign in',
+          'You are not signed in',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -374,8 +375,115 @@ class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _loginPromptShown = false;
 
   final List<String> _titles = ['Tasks', 'Notes', 'Keuangan'];
+
+  // Auth subscription for auto refresh on login/logout/register
+  StreamSubscription<User?>? _authSub;
+
+  // Global keys to control refresh on each tab
+  final GlobalKey<_TodoListScreenState> _todoKey = GlobalKey<_TodoListScreenState>();
+  final GlobalKey<_NotesScreenState> _notesKey = GlobalKey<_NotesScreenState>();
+  final GlobalKey<_FinanceScreenState> _financeKey = GlobalKey<_FinanceScreenState>();
+
+  // Centralized refresh for all tabs
+  Future<void> _refreshAll() async {
+    await Future.wait([
+      _todoKey.currentState?.refresh() ?? Future.value(),
+      _notesKey.currentState?.refresh() ?? Future.value(),
+      _financeKey.currentState?.refresh() ?? Future.value(),
+    ]);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen to auth state changes and trigger global refresh
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((_) {
+      if (mounted) _refreshAll();
+    });
+    // Tampilkan popup benefit login setelah frame pertama agar context siap
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeShowLoginPrompt();
+    });
+  }
+
+  Future<void> _maybeShowLoginPrompt() async {
+    if (_loginPromptShown) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) return; // sudah login, tidak perlu prompt
+    final prefs = await SharedPreferences.getInstance();
+    final seen = prefs.getBool('seen_login_benefit_prompt') ?? false;
+    if (seen) {
+      _loginPromptShown = true;
+      return;
+    }
+    _loginPromptShown = true;
+    if (!mounted) return;
+    bool doNotShowAgain = false;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Login ke TList'),
+              content: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Dengan login kamu bisa'),
+                    const SizedBox(height: 8),
+                    const Text('- Sinkronisasi data ke cloud'),
+                    const Text('- Akses data di banyak perangkat'),
+                    const Text('- Cadangan otomatis'),
+                    const Text(''),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      value: doNotShowAgain,
+                      onChanged: (v) {
+                        setStateDialog(() {
+                          doNotShowAgain = v ?? false;
+                        });
+                      },
+                      title: const Text('Jangan tampilkan lagi'),
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () async {
+                    final p = await SharedPreferences.getInstance();
+                    await p.setBool('seen_login_benefit_prompt', doNotShowAgain);
+                    if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+                  },
+                  child: const Text('Nanti saja'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final p = await SharedPreferences.getInstance();
+                    await p.setBool('seen_login_benefit_prompt', doNotShowAgain);
+                    if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+                    if (!mounted) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const UserPage()),
+                    );
+                  },
+                  child: const Text('Ya, Login'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -383,6 +491,7 @@ class _MainScreenState extends State<MainScreen> {
       appBar: AppBar(
         title: Text(_titles[_currentIndex]),
         actions: [
+          const SizedBox(height: 16),
           IconButton(
             icon: const Icon(Icons.person),
             onPressed: () {
@@ -433,9 +542,9 @@ class _MainScreenState extends State<MainScreen> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          TodoListScreen(searchQuery: _searchQuery),
-          NotesScreen(searchQuery: _searchQuery),
-          FinanceScreen(searchQuery: _searchQuery), // Screen baru
+          TodoListScreen(key: _todoKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll),
+          NotesScreen(key: _notesKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll),
+          FinanceScreen(key: _financeKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll), // Screen baru
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -473,6 +582,7 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -481,8 +591,9 @@ class _MainScreenState extends State<MainScreen> {
 // Finance Screen (BARU)
 class FinanceScreen extends StatefulWidget {
   final String searchQuery;
+  final Future<void> Function()? onGlobalRefresh;
   
-  const FinanceScreen({Key? key, required this.searchQuery}) : super(key: key);
+  const FinanceScreen({Key? key, required this.searchQuery, this.onGlobalRefresh}) : super(key: key);
 
   @override
   State<FinanceScreen> createState() => _FinanceScreenState();
@@ -511,6 +622,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
       expenseCategories = loadedExpenseCategories;
     });
   }
+
+  // Expose public refresh for global trigger
+  Future<void> refresh() => _loadData();
 
   Future<void> _saveTransactions() async {
     await DataService.saveTransactions(transactions);
@@ -702,7 +816,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
           // Transactions List
           Expanded(
             child: RefreshIndicator(
-              onRefresh: _loadData,
+              onRefresh: widget.onGlobalRefresh ?? _loadData,
               child: filteredTransactions.isEmpty
                   ? ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
@@ -1071,8 +1185,9 @@ class _AddEditTransactionDialogState extends State<AddEditTransactionDialog> {
 // Todo List Screen (tetap sama seperti sebelumnya)
 class TodoListScreen extends StatefulWidget {
   final String searchQuery;
+  final Future<void> Function()? onGlobalRefresh;
   
-  const TodoListScreen({Key? key, required this.searchQuery}) : super(key: key);
+  const TodoListScreen({Key? key, required this.searchQuery, this.onGlobalRefresh}) : super(key: key);
 
   @override
   State<TodoListScreen> createState() => _TodoListScreenState();
@@ -1097,6 +1212,9 @@ class _TodoListScreenState extends State<TodoListScreen> {
       categories = ['Semua'] + loadedCategories;
     });
   }
+
+  // Expose public refresh for global trigger
+  Future<void> refresh() => _loadData();
 
   Future<void> _saveTasks() async {
     await DataService.saveTasks(tasks);
@@ -1245,7 +1363,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
           ),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: _loadData,
+              onRefresh: widget.onGlobalRefresh ?? _loadData,
               child: filteredTasks.isEmpty
                   ? ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
@@ -1304,8 +1422,9 @@ class _TodoListScreenState extends State<TodoListScreen> {
 // Notes Screen (tetap sama seperti sebelumnya)
 class NotesScreen extends StatefulWidget {
   final String searchQuery;
+  final Future<void> Function()? onGlobalRefresh;
   
-  const NotesScreen({Key? key, required this.searchQuery}) : super(key: key);
+  const NotesScreen({Key? key, required this.searchQuery, this.onGlobalRefresh}) : super(key: key);
 
   @override
   State<NotesScreen> createState() => _NotesScreenState();
@@ -1331,6 +1450,9 @@ class _NotesScreenState extends State<NotesScreen> {
       categories = ['Semua'] + loadedCategories;
     });
   }
+
+  // Expose public refresh for global trigger
+  Future<void> refresh() => _loadData();
 
   Future<void> _saveNotes() async {
     await DataService.saveNotes(notes);
@@ -1459,7 +1581,7 @@ class _NotesScreenState extends State<NotesScreen> {
           ),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: _loadData,
+              onRefresh: widget.onGlobalRefresh ?? _loadData,
               child: filteredNotes.isEmpty
                   ? ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
