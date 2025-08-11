@@ -2,10 +2,18 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firebase_options.dart';
 
 import 'package:tlist/page/user.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
@@ -204,50 +212,132 @@ class DataService {
 
   // Tasks (tetap sama)
   static Future<List<Task>> loadTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? tasksJson = prefs.getString(_tasksKey);
-    if (tasksJson == null) return [];
-
-    final List<dynamic> tasksList = json.decode(tasksJson);
-    return tasksList.map((task) => Task.fromJson(task)).toList();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('tasks')
+          .get();
+      return snap.docs.map((d) => Task.fromJson(d.data())).toList();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String? tasksJson = prefs.getString(_tasksKey);
+      if (tasksJson == null) return [];
+      final List<dynamic> tasksList = json.decode(tasksJson);
+      return tasksList.map((task) => Task.fromJson(task)).toList();
+    }
   }
 
   static Future<void> saveTasks(List<Task> tasks) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String tasksJson = json.encode(tasks.map((task) => task.toJson()).toList());
-    await prefs.setString(_tasksKey, tasksJson);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final col = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('tasks');
+      final batch = FirebaseFirestore.instance.batch();
+      // clear existing by fetching and deleting, then re-add
+      final existing = await col.get();
+      for (final doc in existing.docs) {
+        batch.delete(doc.reference);
+      }
+      for (final t in tasks) {
+        final ref = col.doc(t.id);
+        batch.set(ref, t.toJson());
+      }
+      await batch.commit();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String tasksJson = json.encode(tasks.map((task) => task.toJson()).toList());
+      await prefs.setString(_tasksKey, tasksJson);
+    }
   }
 
   // Notes (tetap sama)
   static Future<List<Note>> loadNotes() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? notesJson = prefs.getString(_notesKey);
-    if (notesJson == null) return [];
-
-    final List<dynamic> notesList = json.decode(notesJson);
-    return notesList.map((note) => Note.fromJson(note)).toList();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('notes')
+          .get();
+      return snap.docs.map((d) => Note.fromJson(d.data())).toList();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String? notesJson = prefs.getString(_notesKey);
+      if (notesJson == null) return [];
+      final List<dynamic> notesList = json.decode(notesJson);
+      return notesList.map((note) => Note.fromJson(note)).toList();
+    }
   }
 
   static Future<void> saveNotes(List<Note> notes) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String notesJson = json.encode(notes.map((note) => note.toJson()).toList());
-    await prefs.setString(_notesKey, notesJson);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final col = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('notes');
+      final batch = FirebaseFirestore.instance.batch();
+      final existing = await col.get();
+      for (final doc in existing.docs) {
+        batch.delete(doc.reference);
+      }
+      for (final n in notes) {
+        final ref = col.doc(n.id);
+        batch.set(ref, n.toJson());
+      }
+      await batch.commit();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String notesJson = json.encode(notes.map((note) => note.toJson()).toList());
+      await prefs.setString(_notesKey, notesJson);
+    }
   }
 
   // Transactions (BARU)
   static Future<List<Transaction>> loadTransactions() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? transactionsJson = prefs.getString(_transactionsKey);
-    if (transactionsJson == null) return [];
-
-    final List<dynamic> transactionsList = json.decode(transactionsJson);
-    return transactionsList.map((transaction) => Transaction.fromJson(transaction)).toList();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('transactions')
+          .get();
+      return snap.docs.map((d) => Transaction.fromJson(d.data())).toList();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String? transactionsJson = prefs.getString(_transactionsKey);
+      if (transactionsJson == null) return [];
+      final List<dynamic> transactionsList = json.decode(transactionsJson);
+      return transactionsList.map((transaction) => Transaction.fromJson(transaction)).toList();
+    }
   }
 
   static Future<void> saveTransactions(List<Transaction> transactions) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String transactionsJson = json.encode(transactions.map((transaction) => transaction.toJson()).toList());
-    await prefs.setString(_transactionsKey, transactionsJson);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final col = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('transactions');
+      final batch = FirebaseFirestore.instance.batch();
+      final existing = await col.get();
+      for (final doc in existing.docs) {
+        batch.delete(doc.reference);
+      }
+      for (final tr in transactions) {
+        final ref = col.doc(tr.id);
+        batch.set(ref, tr.toJson());
+      }
+      await batch.commit();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String transactionsJson = json.encode(transactions.map((transaction) => transaction.toJson()).toList());
+      await prefs.setString(_transactionsKey, transactionsJson);
+    }
   }
 
   // Categories

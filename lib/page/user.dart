@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:tlist/page/login.dart';
 import 'package:tlist/page/register.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class UserPage extends StatelessWidget {
   const UserPage({super.key});
@@ -12,7 +13,19 @@ class UserPage extends StatelessWidget {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: _buildSignedOut(context),
+          child: StreamBuilder<User?>(
+            stream: FirebaseAuth.instance.authStateChanges(),
+            builder: (context, snapshot) {
+              final user = snapshot.data;
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (user == null) {
+                return _buildSignedOut(context);
+              }
+              return _buildSignedIn(context, user);
+            },
+          ),
         ),
       ),
     );
@@ -56,6 +69,35 @@ class UserPage extends StatelessWidget {
           },
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           child: const Text('Daftar'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSignedIn(BuildContext context, User user) {
+    final displayName = user.displayName ?? 'Pengguna';
+    final email = user.email ?? '-';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        ListTile(
+          leading: const CircleAvatar(child: Icon(Icons.person)),
+          title: Text(displayName),
+          subtitle: Text(email),
+        ),
+        const Divider(),
+        ListTile(
+          leading: const Icon(Icons.logout),
+          title: const Text('Keluar'),
+          onTap: () async {
+            await FirebaseAuth.instance.signOut();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Signed out')),
+              );
+            }
+          },
         ),
       ],
     );

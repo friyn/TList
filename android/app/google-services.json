@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "582262425557",
+    "project_id": "tlistserver",
+    "storage_bucket": "tlistserver.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:582262425557:android:81685a50fe61a2ad029f5c",
+        "android_client_info": {
+          "package_name": "com.friyn.tlist"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAWYT98BF7VQr3y_qThu5wae0vG308nF6k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

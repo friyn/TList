@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:tlist/page/register.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,13 +15,45 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _obscure = true;
 
-  void _submit() {
-    if (_formKey.currentState?.validate() ?? false) {
-      FocusScope.of(context).unfocus();
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    FocusScope.of(context).unfocus();
+    final email = _emailController.text.trim();
+    final pass = _passwordController.text;
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: pass,
+      );
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Login berhasil')),
       );
-      // TODO: Integrasikan dengan auth/routing bila diperlukan.
+      Navigator.pop(context);
+    } on FirebaseAuthException catch (e) {
+      final msg = _humanizeAuthError(e.code);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg)),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Terjadi kesalahan: $e')),
+      );
+    }
+  }
+
+  String _humanizeAuthError(String code) {
+    switch (code) {
+      case 'invalid-email':
+        return 'Email tidak valid';
+      case 'user-disabled':
+        return 'Akun dinonaktifkan';
+      case 'user-not-found':
+        return 'Pengguna tidak ditemukan';
+      case 'wrong-password':
+        return 'Password salah';
+      default:
+        return 'Login gagal ($code)';
     }
   }
 

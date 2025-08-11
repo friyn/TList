@@ -46,5 +46,9 @@ app.*.map.json
 /android/build/reports
 
 # Firebase
-.Firebase
+.firebaserc
 firebase.json
+firebase-debug.log
+.firebase
+.github
+firebaseconfig.js

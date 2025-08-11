@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -20,11 +21,49 @@ class _RegisterPageState extends State<RegisterPage> {
   void _submit() {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     FocusScope.of(context).unfocus();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Registrasi berhasil')),
-    );
-    // TODO: Integrasikan ke backend/auth jika dibutuhkan
-    Navigator.pop(context); // kembali ke login
+    _register();
+  }
+
+  Future<void> _register() async {
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final pass = _passwordController.text;
+    try {
+      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: pass,
+      );
+      await cred.user?.updateDisplayName(name);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Registrasi berhasil')),
+      );
+      Navigator.pop(context);
+    } on FirebaseAuthException catch (e) {
+      final msg = _humanizeAuthError(e.code);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg)),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Terjadi kesalahan: $e')),
+      );
+    }
+  }
+
+  String _humanizeAuthError(String code) {
+    switch (code) {
+      case 'email-already-in-use':
+        return 'Email sudah terdaftar';
+      case 'invalid-email':
+        return 'Email tidak valid';
+      case 'operation-not-allowed':
+        return 'Operasi tidak diizinkan';
+      case 'weak-password':
+        return 'Password terlalu lemah';
+      default:
+        return 'Registrasi gagal ($code)';
+    }
   }
 
   @override
