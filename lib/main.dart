@@ -7,6 +7,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
+import 'utils/app_update.dart';
 
 import 'package:tlist/page/user.dart';
 
@@ -376,11 +377,15 @@ class _MainScreenState extends State<MainScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   bool _loginPromptShown = false;
+  // Optional: URL ke manifest update (JSON) yang di-host di GitHub Pages/Releases.
+  // Kosongkan jika tidak ingin mengaktifkan fitur update popup.
+  static const String _updateManifestUrl = 'https://tlistserver.web.app/update.json';
 
   final List<String> _titles = ['Tasks', 'Notes', 'Keuangan'];
 
   // Auth subscription for auto refresh on login/logout/register
   StreamSubscription<User?>? _authSub;
+  bool _pendingAuthRefresh = false;
 
   // Global keys to control refresh on each tab
   final GlobalKey<_TodoListScreenState> _todoKey = GlobalKey<_TodoListScreenState>();
@@ -399,13 +404,39 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
-    // Listen to auth state changes and trigger global refresh
+    // Listen to auth state changes and trigger global refresh (next frame, debounced)
     _authSub = FirebaseAuth.instance.authStateChanges().listen((_) {
-      if (mounted) _refreshAll();
+      if (!mounted || _pendingAuthRefresh) return;
+      _pendingAuthRefresh = true;
+      try {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          try {
+            if (mounted) {
+              await _refreshAll();
+            }
+          } catch (e, st) {
+            debugPrint('Auth refresh error: $e\n$st');
+          } finally {
+            _pendingAuthRefresh = false;
+          }
+        });
+      } catch (e, st) {
+        debugPrint('Scheduling auth refresh failed: $e\n$st');
+        _pendingAuthRefresh = false;
+      }
     });
     // Tampilkan popup benefit login setelah frame pertama agar context siap
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _maybeShowLoginPrompt();
+    });
+    // Cek pembaruan aplikasi (cross-platform) setelah frame pertama
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_updateManifestUrl.isNotEmpty) {
+        AppUpdate.checkAndPrompt(
+          context,
+          config: const AppUpdateConfig(manifestUrl: _updateManifestUrl),
+        );
+      }
     });
   }
 
@@ -863,6 +894,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab-finance',
         onPressed: () => _addTransaction('income'),
         child: const Icon(Icons.add),
       ),
@@ -1412,6 +1444,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab-tasks',
         onPressed: _addTask,
         child: const Icon(Icons.add),
       ),
@@ -1648,6 +1681,7 @@ class _NotesScreenState extends State<NotesScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab-notes',
         onPressed: _addNote,
         child: const Icon(Icons.add),
       ),
