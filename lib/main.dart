@@ -1,6 +1,8 @@
 // main.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:home_widget/home_widget.dart';
+
 import 'dart:convert';
 import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
@@ -636,6 +638,37 @@ class _FinanceScreenState extends State<FinanceScreen> {
   List<String> expenseCategories = [];
   String selectedFilter = 'Semua'; // 'Semua', 'Pemasukan', 'Pengeluaran'
 
+  double get _balance {
+    double income = 0;
+    double expense = 0;
+    for (final t in transactions) {
+      if (t.type == 'income') {
+        income += t.amount;
+      } else if (t.type == 'expense') {
+        expense += t.amount;
+      }
+    }
+    return income - expense;
+  }
+
+  Future<void> _updateAndroidFinanceWidget() async {
+    try {
+      final balanceText = _formatCurrency(_balance);
+      await HomeWidget.saveWidgetData<String>('balance', balanceText);
+      await HomeWidget.updateWidget(name: 'FinanceWidgetProvider');
+    } catch (_) {
+      // ignore widget update errors gracefully
+    }
+  }
+
+  String _formatCurrency(double value) {
+    // Simple currency formatting without intl to avoid extra deps
+    final isNeg = value < 0;
+    final abs = value.abs();
+    final s = abs.toStringAsFixed(2);
+    return (isNeg ? '-' : '') + 'Rp ' + s;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -652,6 +685,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
       incomeCategories = loadedIncomeCategories;
       expenseCategories = loadedExpenseCategories;
     });
+    await _updateAndroidFinanceWidget();
   }
 
   // Expose public refresh for global trigger
@@ -659,6 +693,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
   Future<void> _saveTransactions() async {
     await DataService.saveTransactions(transactions);
+    await _updateAndroidFinanceWidget();
   }
 
   List<Transaction> get filteredTransactions {

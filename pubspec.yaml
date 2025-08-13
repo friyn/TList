@@ -25,6 +25,7 @@ dependencies:
   package_info_plus: ^8.0.2
   http: ^1.2.2
   url_launcher: ^6.3.0
+  home_widget: ^0.8.0
 
 dev_dependencies:
   flutter_test:
