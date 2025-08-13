@@ -3,6 +3,7 @@ import 'package:tlist/page/login.dart';
 import 'package:tlist/page/register.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:tlist/utils/app_update.dart';
 
 class UserPage extends StatelessWidget {
   const UserPage({super.key});
@@ -70,6 +71,25 @@ class UserPage extends StatelessWidget {
           },
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           child: const Text('Daftar'),
+        ),
+        const Divider(),
+        ListTile(
+          leading: const Icon(Icons.system_update_alt),
+          title: const Text('Cek pembaruan'),
+          subtitle: const Text('Periksa apakah ada versi terbaru'),
+          onTap: () async {
+            final manifestUrl = kIsWeb
+                ? Uri.base.resolve('update.json').toString() // same-origin to avoid CORS in web
+                : 'https://tlistserver.web.app/update.json';
+            final cfg = AppUpdateConfig(manifestUrl: manifestUrl);
+            // Manual check: tampilkan prompt meskipun sebelumnya pernah di-dismiss.
+            await AppUpdate.checkAndPrompt(
+              context,
+              config: cfg,
+              silentOnError: false,
+              ignoreDismiss: true,
+            );
+          },
         ),
       ],
     );
@@ -238,6 +258,70 @@ class UserPage extends StatelessWidget {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Signed out')),
+              );
+            }
+          },
+        ),
+        const Divider(),
+        ListTile(
+          leading: const Icon(Icons.system_update_alt),
+          title: const Text('Cek pembaruan'),
+          subtitle: const Text('Periksa apakah ada versi terbaru'),
+          onTap: () async {
+            final manifestUrl = kIsWeb
+                ? Uri.base.resolve('update.json').toString()
+                : 'https://tlistserver.web.app/update.json';
+            final cfg = AppUpdateConfig(manifestUrl: manifestUrl);
+            final status = await AppUpdate.getStatus(config: cfg);
+            if (!context.mounted) return;
+            final info = status.info;
+            if (info == null) {
+              // gagal memuat manifest
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Gagal memeriksa pembaruan'),
+                  content: const Text('Tidak bisa memuat informasi pembaruan saat ini. Coba lagi nanti.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Tutup'),
+                    ),
+                  ],
+                ),
+              );
+              return;
+            }
+
+            if (!status.isNewer) {
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Sudah versi terbaru'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Versi terpasang: ${status.currentVersion}'),
+                      Text('Versi terbaru: ${info.version}'),
+                      const SizedBox(height: 8),
+                      if ((info.notes ?? '').isNotEmpty)
+                        Text(info.notes!),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('OK'),
+                    ),
+                  ],
+                ),
+              );
+            } else {
+              await AppUpdate.checkAndPrompt(
+                context,
+                config: cfg,
+                silentOnError: false,
               );
             }
           },

@@ -47,6 +47,20 @@ class AppUpdateInfo {
   }
 }
 
+class UpdateCheckResult {
+  final String currentVersion;
+  final AppUpdateInfo? info;
+  final bool isNewer;
+  final bool forced;
+
+  UpdateCheckResult({
+    required this.currentVersion,
+    required this.info,
+    required this.isNewer,
+    required this.forced,
+  });
+}
+
 class AppUpdate {
   static const _prefsDismissKey = 'dismissed_update_version';
 
@@ -54,6 +68,7 @@ class AppUpdate {
     BuildContext context, {
     required AppUpdateConfig config,
     bool silentOnError = true,
+    bool ignoreDismiss = true,
   }) async {
     try {
       final info = await _fetchUpdateInfo(config.manifestUrl);
@@ -69,7 +84,7 @@ class AppUpdate {
       final dismissed = prefs.getString(_prefsDismissKey);
 
       final forced = info.minForce != null && _isRemoteNewer(currentVersion, info.minForce!);
-      if (!forced && dismissed == info.version) {
+      if (!forced && !ignoreDismiss && dismissed == info.version) {
         return; // already dismissed this optional version
       }
 
@@ -111,6 +126,50 @@ class AppUpdate {
       if (b[i] < a[i]) return false;
     }
     return false; // equal
+  }
+
+  /// Fetch update status along with manifest details and current version.
+  static Future<UpdateCheckResult> getStatus({
+    required AppUpdateConfig config,
+  }) async {
+    try {
+      final info = await _fetchUpdateInfo(config.manifestUrl);
+      final pkg = await PackageInfo.fromPlatform();
+      final currentVersion = '${pkg.version}+${pkg.buildNumber}';
+      final isNewer = info != null ? _isRemoteNewer(currentVersion, info.version) : false;
+      final forced = info != null && info.minForce != null
+          ? _isRemoteNewer(currentVersion, info.minForce!)
+          : false;
+      return UpdateCheckResult(
+        currentVersion: currentVersion,
+        info: info,
+        isNewer: isNewer,
+        forced: forced,
+      );
+    } catch (_) {
+      final pkg = await PackageInfo.fromPlatform();
+      return UpdateCheckResult(
+        currentVersion: '${pkg.version}+${pkg.buildNumber}',
+        info: null,
+        isNewer: false,
+        forced: false,
+      );
+    }
+  }
+
+  /// Returns true if a newer version than the currently installed app is available.
+  static Future<bool> isUpdateAvailable({
+    required AppUpdateConfig config,
+  }) async {
+    try {
+      final info = await _fetchUpdateInfo(config.manifestUrl);
+      if (info == null) return false;
+      final pkg = await PackageInfo.fromPlatform();
+      final currentVersion = '${pkg.version}+${pkg.buildNumber}';
+      return _isRemoteNewer(currentVersion, info.version);
+    } catch (_) {
+      return false;
+    }
   }
 
   static Future<void> _showDialog(
