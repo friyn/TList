@@ -426,6 +426,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   final TextEditingController _searchController = TextEditingController();
+  late PageController _pageController;
   String _searchQuery = '';
   bool _loginPromptShown = false;
   // Optional: URL ke manifest update (JSON) yang di-host di GitHub Pages/Releases.
@@ -455,6 +456,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: _currentIndex);
     // Listen to auth state changes and trigger global refresh (next frame, debounced)
     _authSub = FirebaseAuth.instance.authStateChanges().listen((_) {
       if (!mounted || _pendingAuthRefresh) return;
@@ -620,23 +622,30 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ),
       ),
-      body: IndexedStack(
-        index: _currentIndex,
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) {
+          setState(() {
+            _currentIndex = index;
+            _searchController.clear();
+            _searchQuery = '';
+          });
+        },
         children: [
           TodoListScreen(key: _todoKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll),
           NotesScreen(key: _notesKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll),
-          FinanceScreen(key: _financeKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll), // Screen baru
+          FinanceScreen(key: _financeKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         type: BottomNavigationBarType.fixed,
         onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-            _searchController.clear();
-            _searchQuery = '';
-          });
+          _pageController.animateToPage(
+            index,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
         },
         items: const [
           BottomNavigationBarItem(
@@ -663,6 +672,7 @@ class _MainScreenState extends State<MainScreen> {
   void dispose() {
     _authSub?.cancel();
     _searchController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 }
@@ -683,6 +693,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
   List<String> incomeCategories = [];
   List<String> expenseCategories = [];
   String selectedFilter = 'Semua'; // 'Semua', 'Pemasukan', 'Pengeluaran'
+  bool isLoading = true;
 
   double get _balance {
     double income = 0;
@@ -715,6 +726,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
   }
 
   Future<void> _loadData() async {
+    setState(() {
+      isLoading = true;
+    });
+    
     final loadedTransactions = await DataService.loadTransactions();
     final loadedIncomeCategories = await DataService.loadIncomeCategories();
     final loadedExpenseCategories = await DataService.loadExpenseCategories();
@@ -723,6 +738,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
       transactions = loadedTransactions;
       incomeCategories = loadedIncomeCategories;
       expenseCategories = loadedExpenseCategories;
+      isLoading = false;
     });
     await _updateAndroidFinanceWidget();
   }
@@ -840,6 +856,21 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Memuat data keuangan...'),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       body: Column(
         children: [
@@ -1306,6 +1337,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
   List<Task> tasks = [];
   List<String> categories = [];
   String selectedCategory = 'Semua';
+  bool isLoading = true;
 
   @override
   void initState() {
@@ -1314,11 +1346,16 @@ class _TodoListScreenState extends State<TodoListScreen> {
   }
 
   Future<void> _loadData() async {
+    setState(() {
+      isLoading = true;
+    });
+    
     final loadedTasks = await DataService.loadTasks();
     final loadedCategories = await DataService.loadTaskCategories();
     setState(() {
       tasks = loadedTasks;
       categories = ['Semua'] + loadedCategories;
+      isLoading = false;
     });
   }
 
@@ -1438,6 +1475,21 @@ class _TodoListScreenState extends State<TodoListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Memuat tasks...'),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       body: Column(
         children: [
@@ -1544,6 +1596,7 @@ class _NotesScreenState extends State<NotesScreen> {
   List<Note> notes = [];
   List<String> categories = [];
   String selectedCategory = 'Semua';
+  bool isLoading = true;
   bool isGridView = false;
 
   @override
@@ -1553,11 +1606,16 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   Future<void> _loadData() async {
+    setState(() {
+      isLoading = true;
+    });
+    
     final loadedNotes = await DataService.loadNotes();
     final loadedCategories = await DataService.loadNoteCategories();
     setState(() {
       notes = loadedNotes;
       categories = ['Semua'] + loadedCategories;
+      isLoading = false;
     });
   }
 
@@ -1649,6 +1707,21 @@ class _NotesScreenState extends State<NotesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Memuat notes...'),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       body: Column(
         children: [

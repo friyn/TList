@@ -46,7 +46,7 @@ class UserPage extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(
-          'Kamu Belum Log In',
+          'Kamu Belum Login',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
