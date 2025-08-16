@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:tlist/page/register.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,6 +16,7 @@ class _LoginPageState extends State<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscure = true;
+  static bool _googleInitialized = false;
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
@@ -141,6 +144,48 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
+  Future<void> _signInWithGoogle() async {
+    try {
+      if (kIsWeb) {
+        final provider = GoogleAuthProvider();
+        final hint = _emailController.text.trim();
+        if (hint.isNotEmpty) {
+          provider.setCustomParameters({'login_hint': hint});
+        }
+        await FirebaseAuth.instance.signInWithPopup(provider);
+      } else {
+        if (!_googleInitialized) {
+          await GoogleSignIn.instance.initialize(
+            serverClientId:
+                '582262425557-doq1ic0ia81krqmelq24lkb6sh4oaef2.apps.googleusercontent.com',
+          );
+          _googleInitialized = true;
+        }
+        final account = await GoogleSignIn.instance.authenticate();
+        final googleAuth = await account.authentication;
+        final credential = GoogleAuthProvider.credential(
+          idToken: googleAuth.idToken,
+        );
+        await FirebaseAuth.instance.signInWithCredential(credential);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Login Google berhasil')),
+      );
+      Navigator.pop(context);
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Login Google gagal: ${e.code}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Login Google gagal: $e')),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -228,6 +273,20 @@ class _LoginPageState extends State<LoginPage> {
                   child: const Text('Login'),
                 ),
                 const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _signInWithGoogle,
+                  icon: const Image(
+                    image: AssetImage('assets/google.png'),
+                    width: 24,
+                    height: 24,
+                  ),
+                  label: const Text('Lanjutkan dengan Google'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Divider(),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

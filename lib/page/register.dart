@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:tlist/page/login.dart';
@@ -82,6 +84,49 @@ class _RegisterPageState extends State<RegisterPage> {
     super.dispose();
   }
 
+  bool _googleInitialized = false;
+
+  Future<void> _signInWithGoogle() async {
+    try {
+      if (kIsWeb) {
+        final provider = GoogleAuthProvider();
+        final hint = _emailController.text.trim();
+        if (hint.isNotEmpty) {
+          provider.setCustomParameters({'login_hint': hint});
+        }
+        await FirebaseAuth.instance.signInWithPopup(provider);
+      } else {
+        if (!_googleInitialized) {
+          await GoogleSignIn.instance.initialize(
+            serverClientId:
+                '582262425557-doq1ic0ia81krqmelq24lkb6sh4oaef2.apps.googleusercontent.com',
+          );
+          _googleInitialized = true;
+        }
+        final account = await GoogleSignIn.instance.authenticate();
+        final googleAuth = await account.authentication;
+        final credential = GoogleAuthProvider.credential(
+          idToken: googleAuth.idToken,
+        );
+        await FirebaseAuth.instance.signInWithCredential(credential);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Login Google berhasil')),
+      );
+      Navigator.pop(context);
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Login Google gagal: ${e.code}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Login Google gagal: $e')),
+      );
+    }
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -198,6 +243,20 @@ class _RegisterPageState extends State<RegisterPage> {
                   child: const Text('Daftar'),
                 ),
                 const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _signInWithGoogle,
+                  icon: const Image(
+                    image: AssetImage('assets/google.png'),
+                    width: 24,
+                    height: 24,
+                  ),
+                  label: const Text('Lanjutkan dengan Google'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Divider(),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

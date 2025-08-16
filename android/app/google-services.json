@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "582262425557",
+    "firebase_url": "https://tlistserver-default-rtdb.asia-southeast1.firebasedatabase.app",
     "project_id": "tlistserver",
     "storage_bucket": "tlistserver.firebasestorage.app"
   },
@@ -12,7 +13,20 @@
           "package_name": "com.friyn.tlist"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "582262425557-8dtdmlh6an70mqmcocl1quup2g1ds80s.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.friyn.tlist",
+            "certificate_hash": "d13679b2f83cde9bf1da3a91df669e3b63e30de5"
+          }
+        },
+        {
+          "client_id": "582262425557-doq1ic0ia81krqmelq24lkb6sh4oaef2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAWYT98BF7VQr3y_qThu5wae0vG308nF6k"
@@ -20,7 +34,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "582262425557-doq1ic0ia81krqmelq24lkb6sh4oaef2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
