@@ -22,7 +22,7 @@ class FinanceWidgetProvider : HomeWidgetProvider() {
             views.setTextViewText(R.id.txt_balance, balance)
 
             val pendingIntent = HomeWidgetLaunchIntent.getActivity(context, MainActivity::class.java)
-            views.setOnClickPendingIntent(R.id.txt_title, pendingIntent)
+            views.setOnClickPendingIntent(R.id.txt_title, pendingIntent)    
             views.setOnClickPendingIntent(R.id.txt_balance, pendingIntent)
 
             appWidgetManager.updateAppWidget(widgetId, views)

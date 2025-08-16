@@ -44,11 +44,13 @@ class UserPage extends StatelessWidget {
             height: 80,
           ),
         ),
-        const SizedBox(height: 16),
-        const Text(
-          'You are not signed in',
+        const SizedBox(height: 12),
+        Text(
+          'Kamu Belum Log In',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+            ),
         ),
         const SizedBox(height: 24),
         ElevatedButton(
@@ -79,18 +81,81 @@ class UserPage extends StatelessWidget {
           subtitle: const Text('Periksa apakah ada versi terbaru'),
           onTap: () async {
             final manifestUrl = kIsWeb
-                ? Uri.base.resolve('update.json').toString() // same-origin to avoid CORS in web
+                ? Uri.base.resolve('update.json').toString()
                 : 'https://tlistserver.web.app/update.json';
             final cfg = AppUpdateConfig(manifestUrl: manifestUrl);
-            // Manual check: tampilkan prompt meskipun sebelumnya pernah di-dismiss.
-            await AppUpdate.checkAndPrompt(
-              context,
-              config: cfg,
-              silentOnError: false,
-              ignoreDismiss: true,
-            );
+            final status = await AppUpdate.getStatus(config: cfg);
+            if (!context.mounted) return;
+            final info = status.info;
+            if (info == null) {
+              // gagal memuat manifest
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Gagal memeriksa pembaruan'),
+                  content: const Text('Tidak bisa memuat informasi pembaruan saat ini. Coba lagi nanti.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Tutup'),
+                    ),
+                  ],
+                ),
+              );
+              return;
+            }
+
+            if (!status.isNewer) {
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Sudah versi terbaru'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Versi terpasang: ${status.currentVersion}'),
+                      Text('Versi terbaru: ${info.version}'),
+                      const SizedBox(height: 8),
+                      if ((info.notes ?? '').isNotEmpty)
+                        Text(info.notes!),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('OK'),
+                    ),
+                  ],
+                ),
+              );
+            } else {
+              await AppUpdate.checkAndPrompt(
+                context,
+                config: cfg,
+                silentOnError: false,
+              );
+            }
           },
         ),
+        // ListTile(
+        //   leading: const Icon(Icons.system_update_alt),
+        //   title: const Text('Cek pembaruan'),
+        //   subtitle: const Text('Periksa apakah ada versi terbaru'),
+        //   onTap: () async {
+        //     final manifestUrl = kIsWeb
+        //         ? Uri.base.resolve('update.json').toString() // same-origin to avoid CORS in web
+        //         : 'https://tlistserver.web.app/update.json';
+        //     final cfg = AppUpdateConfig(manifestUrl: manifestUrl);
+        //     // Manual check: tampilkan prompt meskipun sebelumnya pernah di-dismiss.
+        //     await AppUpdate.checkAndPrompt(
+        //       context,
+        //       config: cfg,
+        //       silentOnError: false,
+        //       ignoreDismiss: true,
+        //     );
+        //   },
+        // ),
       ],
     );
   }
