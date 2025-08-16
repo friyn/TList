@@ -44,3 +44,13 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 /android/build/reports
+
+# Firebase
+.firebaserc
+firebase.json
+firebase-debug.log
+.firebase
+.github
+firebaseconfig.js
+lib/firebase_options.dart
+web/update.json

@@ -1,9 +1,23 @@
 // main.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
+import 'package:home_widget/home_widget.dart';
 
-void main() {
+import 'dart:convert';
+import 'dart:async';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firebase_options.dart';
+import 'utils/app_update.dart';
+
+import 'package:tlist/page/user.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
@@ -202,50 +216,132 @@ class DataService {
 
   // Tasks (tetap sama)
   static Future<List<Task>> loadTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? tasksJson = prefs.getString(_tasksKey);
-    if (tasksJson == null) return [];
-
-    final List<dynamic> tasksList = json.decode(tasksJson);
-    return tasksList.map((task) => Task.fromJson(task)).toList();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('tasks')
+          .get();
+      return snap.docs.map((d) => Task.fromJson(d.data())).toList();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String? tasksJson = prefs.getString(_tasksKey);
+      if (tasksJson == null) return [];
+      final List<dynamic> tasksList = json.decode(tasksJson);
+      return tasksList.map((task) => Task.fromJson(task)).toList();
+    }
   }
 
   static Future<void> saveTasks(List<Task> tasks) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String tasksJson = json.encode(tasks.map((task) => task.toJson()).toList());
-    await prefs.setString(_tasksKey, tasksJson);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final col = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('tasks');
+      final batch = FirebaseFirestore.instance.batch();
+      // clear existing by fetching and deleting, then re-add
+      final existing = await col.get();
+      for (final doc in existing.docs) {
+        batch.delete(doc.reference);
+      }
+      for (final t in tasks) {
+        final ref = col.doc(t.id);
+        batch.set(ref, t.toJson());
+      }
+      await batch.commit();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String tasksJson = json.encode(tasks.map((task) => task.toJson()).toList());
+      await prefs.setString(_tasksKey, tasksJson);
+    }
   }
 
   // Notes (tetap sama)
   static Future<List<Note>> loadNotes() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? notesJson = prefs.getString(_notesKey);
-    if (notesJson == null) return [];
-
-    final List<dynamic> notesList = json.decode(notesJson);
-    return notesList.map((note) => Note.fromJson(note)).toList();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('notes')
+          .get();
+      return snap.docs.map((d) => Note.fromJson(d.data())).toList();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String? notesJson = prefs.getString(_notesKey);
+      if (notesJson == null) return [];
+      final List<dynamic> notesList = json.decode(notesJson);
+      return notesList.map((note) => Note.fromJson(note)).toList();
+    }
   }
 
   static Future<void> saveNotes(List<Note> notes) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String notesJson = json.encode(notes.map((note) => note.toJson()).toList());
-    await prefs.setString(_notesKey, notesJson);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final col = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('notes');
+      final batch = FirebaseFirestore.instance.batch();
+      final existing = await col.get();
+      for (final doc in existing.docs) {
+        batch.delete(doc.reference);
+      }
+      for (final n in notes) {
+        final ref = col.doc(n.id);
+        batch.set(ref, n.toJson());
+      }
+      await batch.commit();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String notesJson = json.encode(notes.map((note) => note.toJson()).toList());
+      await prefs.setString(_notesKey, notesJson);
+    }
   }
 
   // Transactions (BARU)
   static Future<List<Transaction>> loadTransactions() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? transactionsJson = prefs.getString(_transactionsKey);
-    if (transactionsJson == null) return [];
-
-    final List<dynamic> transactionsList = json.decode(transactionsJson);
-    return transactionsList.map((transaction) => Transaction.fromJson(transaction)).toList();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('transactions')
+          .get();
+      return snap.docs.map((d) => Transaction.fromJson(d.data())).toList();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String? transactionsJson = prefs.getString(_transactionsKey);
+      if (transactionsJson == null) return [];
+      final List<dynamic> transactionsList = json.decode(transactionsJson);
+      return transactionsList.map((transaction) => Transaction.fromJson(transaction)).toList();
+    }
   }
 
   static Future<void> saveTransactions(List<Transaction> transactions) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String transactionsJson = json.encode(transactions.map((transaction) => transaction.toJson()).toList());
-    await prefs.setString(_transactionsKey, transactionsJson);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final col = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('transactions');
+      final batch = FirebaseFirestore.instance.batch();
+      final existing = await col.get();
+      for (final doc in existing.docs) {
+        batch.delete(doc.reference);
+      }
+      for (final tr in transactions) {
+        final ref = col.doc(tr.id);
+        batch.set(ref, tr.toJson());
+      }
+      await batch.commit();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String transactionsJson = json.encode(transactions.map((transaction) => transaction.toJson()).toList());
+      await prefs.setString(_transactionsKey, transactionsJson);
+    }
   }
 
   // Categories
@@ -282,14 +378,163 @@ class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _loginPromptShown = false;
+  // Optional: URL ke manifest update (JSON) yang di-host di GitHub Pages/Releases.
+  // Kosongkan jika tidak ingin mengaktifkan fitur update popup.
+  static const String _updateManifestUrl = 'https://tlistserver.web.app/update.json';
 
-  final List<String> _titles = ['To-Do List', 'My Notes', 'Keuangan'];
+  final List<String> _titles = ['Tasks', 'Notes', 'Keuangan'];
+
+  // Auth subscription for auto refresh on login/logout/register
+  StreamSubscription<User?>? _authSub;
+  bool _pendingAuthRefresh = false;
+
+  // Global keys to control refresh on each tab
+  final GlobalKey<_TodoListScreenState> _todoKey = GlobalKey<_TodoListScreenState>();
+  final GlobalKey<_NotesScreenState> _notesKey = GlobalKey<_NotesScreenState>();
+  final GlobalKey<_FinanceScreenState> _financeKey = GlobalKey<_FinanceScreenState>();
+
+  // Centralized refresh for all tabs
+  Future<void> _refreshAll() async {
+    await Future.wait([
+      _todoKey.currentState?.refresh() ?? Future.value(),
+      _notesKey.currentState?.refresh() ?? Future.value(),
+      _financeKey.currentState?.refresh() ?? Future.value(),
+    ]);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen to auth state changes and trigger global refresh (next frame, debounced)
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((_) {
+      if (!mounted || _pendingAuthRefresh) return;
+      _pendingAuthRefresh = true;
+      try {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          try {
+            if (mounted) {
+              await _refreshAll();
+            }
+          } catch (e, st) {
+            debugPrint('Auth refresh error: $e\n$st');
+          } finally {
+            _pendingAuthRefresh = false;
+          }
+        });
+      } catch (e, st) {
+        debugPrint('Scheduling auth refresh failed: $e\n$st');
+        _pendingAuthRefresh = false;
+      }
+    });
+    // Tampilkan popup benefit login setelah frame pertama agar context siap
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeShowLoginPrompt();
+    });
+    // Cek pembaruan aplikasi (cross-platform) setelah frame pertama
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_updateManifestUrl.isNotEmpty) {
+        AppUpdate.checkAndPrompt(
+          context,
+          config: const AppUpdateConfig(manifestUrl: _updateManifestUrl),
+        );
+      }
+    });
+  }
+
+  Future<void> _maybeShowLoginPrompt() async {
+    if (_loginPromptShown) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) return; // sudah login, tidak perlu prompt
+    final prefs = await SharedPreferences.getInstance();
+    final seen = prefs.getBool('seen_login_benefit_prompt') ?? false;
+    if (seen) {
+      _loginPromptShown = true;
+      return;
+    }
+    _loginPromptShown = true;
+    if (!mounted) return;
+    bool doNotShowAgain = false;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Login ke TList'),
+              content: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Dengan login kamu bisa'),
+                    const SizedBox(height: 8),
+                    const Text('- Sinkronisasi data ke cloud'),
+                    const Text('- Akses data di banyak perangkat'),
+                    const Text('- Cadangan otomatis'),
+                    const Text(''),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      value: doNotShowAgain,
+                      onChanged: (v) {
+                        setStateDialog(() {
+                          doNotShowAgain = v ?? false;
+                        });
+                      },
+                      title: const Text('Jangan tampilkan lagi'),
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () async {
+                    final p = await SharedPreferences.getInstance();
+                    await p.setBool('seen_login_benefit_prompt', doNotShowAgain);
+                    if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+                  },
+                  child: const Text('Nanti saja'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final p = await SharedPreferences.getInstance();
+                    await p.setBool('seen_login_benefit_prompt', doNotShowAgain);
+                    if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+                    if (!mounted) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const UserPage()),
+                    );
+                  },
+                  child: const Text('Ya, Login'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_currentIndex]),
+        actions: [
+          const SizedBox(height: 16),
+          IconButton(
+            icon: const Icon(Icons.person),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const UserPage()),
+              );
+            },
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(
@@ -330,15 +575,15 @@ class _MainScreenState extends State<MainScreen> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          TodoListScreen(searchQuery: _searchQuery),
-          NotesScreen(searchQuery: _searchQuery),
-          FinanceScreen(searchQuery: _searchQuery), // Screen baru
+          TodoListScreen(key: _todoKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll),
+          NotesScreen(key: _notesKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll),
+          FinanceScreen(key: _financeKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll), // Screen baru
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         type: BottomNavigationBarType.fixed,
-        selectedItemColor: Colors.blue,
+        selectedItemColor: const Color(0xFF128C7E),
         unselectedItemColor: Colors.grey,
         onTap: (index) {
           setState(() {
@@ -351,7 +596,7 @@ class _MainScreenState extends State<MainScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.check_circle_outline),
             activeIcon: Icon(Icons.check_circle),
-            label: 'To-Do',
+            label: 'Tasks',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.note_outlined),
@@ -370,6 +615,7 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -378,8 +624,9 @@ class _MainScreenState extends State<MainScreen> {
 // Finance Screen (BARU)
 class FinanceScreen extends StatefulWidget {
   final String searchQuery;
+  final Future<void> Function()? onGlobalRefresh;
   
-  const FinanceScreen({Key? key, required this.searchQuery}) : super(key: key);
+  const FinanceScreen({Key? key, required this.searchQuery, this.onGlobalRefresh}) : super(key: key);
 
   @override
   State<FinanceScreen> createState() => _FinanceScreenState();
@@ -390,6 +637,37 @@ class _FinanceScreenState extends State<FinanceScreen> {
   List<String> incomeCategories = [];
   List<String> expenseCategories = [];
   String selectedFilter = 'Semua'; // 'Semua', 'Pemasukan', 'Pengeluaran'
+
+  double get _balance {
+    double income = 0;
+    double expense = 0;
+    for (final t in transactions) {
+      if (t.type == 'income') {
+        income += t.amount;
+      } else if (t.type == 'expense') {
+        expense += t.amount;
+      }
+    }
+    return income - expense;
+  }
+
+  Future<void> _updateAndroidFinanceWidget() async {
+    try {
+      final balanceText = _formatCurrency(_balance);
+      await HomeWidget.saveWidgetData<String>('balance', balanceText);
+      await HomeWidget.updateWidget(name: 'FinanceWidgetProvider');
+    } catch (_) {
+      // ignore widget update errors gracefully
+    }
+  }
+
+  String _formatCurrency(double value) {
+    // Simple currency formatting without intl to avoid extra deps
+    final isNeg = value < 0;
+    final abs = value.abs();
+    final s = abs.toStringAsFixed(2);
+    return (isNeg ? '-' : '') + 'Rp ' + s;
+  }
 
   @override
   void initState() {
@@ -407,10 +685,15 @@ class _FinanceScreenState extends State<FinanceScreen> {
       incomeCategories = loadedIncomeCategories;
       expenseCategories = loadedExpenseCategories;
     });
+    await _updateAndroidFinanceWidget();
   }
+
+  // Expose public refresh for global trigger
+  Future<void> refresh() => _loadData();
 
   Future<void> _saveTransactions() async {
     await DataService.saveTransactions(transactions);
+    await _updateAndroidFinanceWidget();
   }
 
   List<Transaction> get filteredTransactions {
@@ -598,43 +881,55 @@ class _FinanceScreenState extends State<FinanceScreen> {
           
           // Transactions List
           Expanded(
-            child: filteredTransactions.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+            child: RefreshIndicator(
+              onRefresh: widget.onGlobalRefresh ?? _loadData,
+              child: filteredTransactions.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
                       children: [
-                        Icon(Icons.receipt_outlined, size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          widget.searchQuery.isNotEmpty
-                              ? 'Tidak ada transaksi yang cocok'
-                              : 'Belum ada transaksi',
-                          style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                        ),
-                        if (widget.searchQuery.isEmpty)
-                          Text(
-                            'Tap + untuk menambah transaksi baru',
-                            style: TextStyle(color: Colors.grey[500]),
+                        const SizedBox(height: 120),
+                        Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.receipt_outlined, size: 64, color: Colors.grey[400]),
+                              const SizedBox(height: 16),
+                              Text(
+                                widget.searchQuery.isNotEmpty
+                                    ? 'Tidak ada transaksi yang cocok'
+                                    : 'Belum ada transaksi',
+                                style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                              ),
+                              if (widget.searchQuery.isEmpty)
+                                Text(
+                                  'Tap + untuk menambah transaksi baru',
+                                  style: TextStyle(color: Colors.grey[500]),
+                                ),
+                            ],
                           ),
+                        ),
                       ],
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
+                      itemCount: filteredTransactions.length,
+                      itemBuilder: (context, index) {
+                        final transaction = filteredTransactions[index];
+                        return TransactionCard(
+                          transaction: transaction,
+                          onEdit: () => _editTransaction(transaction),
+                          onDelete: () => _deleteTransaction(transaction),
+                        );
+                      },
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16.0),
-                    itemCount: filteredTransactions.length,
-                    itemBuilder: (context, index) {
-                      final transaction = filteredTransactions[index];
-                      return TransactionCard(
-                        transaction: transaction,
-                        onEdit: () => _editTransaction(transaction),
-                        onDelete: () => _deleteTransaction(transaction),
-                      );
-                    },
-                  ),
+            ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab-finance',
         onPressed: () => _addTransaction('income'),
         child: const Icon(Icons.add),
       ),
@@ -869,38 +1164,19 @@ class _AddEditTransactionDialogState extends State<AddEditTransactionDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (widget.transaction == null)
-                Row(
-                  children: [
-                    Expanded(
-                      child: RadioListTile<String>(
-                        dense: true,
-                        title: const Text('Pemasukan'),
-                        value: 'income',
-                        groupValue: _transactionType,
-                        onChanged: (value) {
-                          setState(() {
-                            _transactionType = value!;
-                            _selectedCategory = (value == 'income' ? widget.incomeCategories : widget.expenseCategories).first;
-                          });
-                        },
-                      ),
-                    ),
-                    Expanded(
-                      child: RadioListTile<String>(
-                        dense: true,
-                        title: const Text('Pengeluaran'),
-                        value: 'expense',
-                        groupValue: _transactionType,
-                        onChanged: (value) {
-                          setState(() {
-                            _transactionType = value!;
-                            _selectedCategory = (value == 'income' ? widget.incomeCategories : widget.expenseCategories).first;
-                          });
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+              DropdownButtonFormField<String>(
+                value: _transactionType,
+                items: const [
+                  DropdownMenuItem(child: Text('Pemasukan'), value: 'income'),
+                  DropdownMenuItem(child: Text('Pengeluaran'), value: 'expense'),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _transactionType = value!;
+                    _selectedCategory = (value == 'income' ? widget.incomeCategories : widget.expenseCategories).first;
+                  });
+                },
+              ),
               const SizedBox(height: 16),
               TextField(
                 controller: _titleController,
@@ -976,8 +1252,9 @@ class _AddEditTransactionDialogState extends State<AddEditTransactionDialog> {
 // Todo List Screen (tetap sama seperti sebelumnya)
 class TodoListScreen extends StatefulWidget {
   final String searchQuery;
+  final Future<void> Function()? onGlobalRefresh;
   
-  const TodoListScreen({Key? key, required this.searchQuery}) : super(key: key);
+  const TodoListScreen({Key? key, required this.searchQuery, this.onGlobalRefresh}) : super(key: key);
 
   @override
   State<TodoListScreen> createState() => _TodoListScreenState();
@@ -1002,6 +1279,9 @@ class _TodoListScreenState extends State<TodoListScreen> {
       categories = ['Semua'] + loadedCategories;
     });
   }
+
+  // Expose public refresh for global trigger
+  Future<void> refresh() => _loadData();
 
   Future<void> _saveTasks() async {
     await DataService.saveTasks(tasks);
@@ -1149,45 +1429,57 @@ class _TodoListScreenState extends State<TodoListScreen> {
             ),
           ),
           Expanded(
-            child: filteredTasks.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+            child: RefreshIndicator(
+              onRefresh: widget.onGlobalRefresh ?? _loadData,
+              child: filteredTasks.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
                       children: [
-                        Icon(Icons.task_alt, size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          widget.searchQuery.isNotEmpty
-                              ? 'Tidak ada task yang cocok'
-                              : 'Belum ada task',
-                          style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                        ),
-                        if (widget.searchQuery.isEmpty)
-                          Text(
-                            'Tap + untuk menambah task baru',
-                            style: TextStyle(color: Colors.grey[500]),
+                        const SizedBox(height: 120),
+                        Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.task_alt, size: 64, color: Colors.grey[400]),
+                              const SizedBox(height: 16),
+                              Text(
+                                widget.searchQuery.isNotEmpty
+                                    ? 'Tidak ada task yang cocok'
+                                    : 'Belum ada task',
+                                style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                              ),
+                              if (widget.searchQuery.isEmpty)
+                                Text(
+                                  'Tap + untuk menambah task baru',
+                                  style: TextStyle(color: Colors.grey[500]),
+                                ),
+                            ],
                           ),
+                        ),
                       ],
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(8.0),
+                      itemCount: filteredTasks.length,
+                      itemBuilder: (context, index) {
+                        final task = filteredTasks[index];
+                        return TaskCard(
+                          task: task,
+                          onToggleComplete: () => _toggleTaskComplete(task),
+                          onToggleSubTaskComplete: (subTask) => _toggleSubTaskComplete(task, subTask),
+                          onEdit: () => _editTask(task),
+                          onDelete: () => _deleteTask(task),
+                        );
+                      },
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(8.0),
-                    itemCount: filteredTasks.length,
-                    itemBuilder: (context, index) {
-                      final task = filteredTasks[index];
-                      return TaskCard(
-                        task: task,
-                        onToggleComplete: () => _toggleTaskComplete(task),
-                        onToggleSubTaskComplete: (subTask) => _toggleSubTaskComplete(task, subTask),
-                        onEdit: () => _editTask(task),
-                        onDelete: () => _deleteTask(task),
-                      );
-                    },
-                  ),
+            ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab-tasks',
         onPressed: _addTask,
         child: const Icon(Icons.add),
       ),
@@ -1198,8 +1490,9 @@ class _TodoListScreenState extends State<TodoListScreen> {
 // Notes Screen (tetap sama seperti sebelumnya)
 class NotesScreen extends StatefulWidget {
   final String searchQuery;
+  final Future<void> Function()? onGlobalRefresh;
   
-  const NotesScreen({Key? key, required this.searchQuery}) : super(key: key);
+  const NotesScreen({Key? key, required this.searchQuery, this.onGlobalRefresh}) : super(key: key);
 
   @override
   State<NotesScreen> createState() => _NotesScreenState();
@@ -1225,6 +1518,9 @@ class _NotesScreenState extends State<NotesScreen> {
       categories = ['Semua'] + loadedCategories;
     });
   }
+
+  // Expose public refresh for global trigger
+  Future<void> refresh() => _loadData();
 
   Future<void> _saveNotes() async {
     await DataService.saveNotes(notes);
@@ -1352,62 +1648,75 @@ class _NotesScreenState extends State<NotesScreen> {
             ),
           ),
           Expanded(
-            child: filteredNotes.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+            child: RefreshIndicator(
+              onRefresh: widget.onGlobalRefresh ?? _loadData,
+              child: filteredNotes.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
                       children: [
-                        Icon(Icons.note_outlined, size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          widget.searchQuery.isNotEmpty
-                              ? 'Tidak ada note yang cocok'
-                              : 'Belum ada note',
-                          style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                        ),
-                        if (widget.searchQuery.isEmpty)
-                          Text(
-                            'Tap + untuk menambah note baru',
-                            style: TextStyle(color: Colors.grey[500]),
+                        const SizedBox(height: 120),
+                        Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.note_outlined, size: 64, color: Colors.grey[400]),
+                              const SizedBox(height: 16),
+                              Text(
+                                widget.searchQuery.isNotEmpty
+                                    ? 'Tidak ada note yang cocok'
+                                    : 'Belum ada note',
+                                style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                              ),
+                              if (widget.searchQuery.isEmpty)
+                                Text(
+                                  'Tap + untuk menambah note baru',
+                                  style: TextStyle(color: Colors.grey[500]),
+                                ),
+                            ],
                           ),
-                      ],
-                    ),
-                  )
-                : isGridView
-                    ? GridView.builder(
-                        padding: const EdgeInsets.all(8.0),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 0.8,
-                          crossAxisSpacing: 8,
-                          mainAxisSpacing: 8,
                         ),
-                        itemCount: filteredNotes.length,
-                        itemBuilder: (context, index) {
-                          final note = filteredNotes[index];
-                          return NoteGridCard(
-                            note: note,
-                            onTap: () => _editNote(note),
-                            onDelete: () => _deleteNote(note),
-                          );
-                        },
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(8.0),
-                        itemCount: filteredNotes.length,
-                        itemBuilder: (context, index) {
-                          final note = filteredNotes[index];
-                          return NoteListCard(
-                            note: note,
-                            onTap: () => _editNote(note),
-                            onDelete: () => _deleteNote(note),
-                          );
-                        },
-                      ),
+                      ],
+                    )
+                  : isGridView
+                      ? GridView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(8.0),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            childAspectRatio: 0.8,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                          ),
+                          itemCount: filteredNotes.length,
+                          itemBuilder: (context, index) {
+                            final note = filteredNotes[index];
+                            return NoteGridCard(
+                              note: note,
+                              onTap: () => _editNote(note),
+                              onDelete: () => _deleteNote(note),
+                            );
+                          },
+                        )
+                      : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(8.0),
+                          itemCount: filteredNotes.length,
+                          itemBuilder: (context, index) {
+                            final note = filteredNotes[index];
+                            return NoteListCard(
+                              note: note,
+                              onTap: () => _editNote(note),
+                              onDelete: () => _deleteNote(note),
+                            );
+                          },
+                        ),
+            ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab-notes',
         onPressed: _addNote,
         child: const Icon(Icons.add),
       ),
