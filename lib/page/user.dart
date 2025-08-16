@@ -74,7 +74,7 @@ class UserPage extends StatelessWidget {
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           child: const Text('Daftar'),
         ),
-        const Divider(),
+        Divider(color: Theme.of(context).dividerColor.withOpacity(0.5)),
         ListTile(
           leading: const Icon(Icons.system_update_alt),
           title: const Text('Cek pembaruan'),
@@ -172,7 +172,7 @@ class UserPage extends StatelessWidget {
           title: Text(displayName),
           subtitle: Text(email),
         ),
-        const Divider(),
+        Divider(color: Theme.of(context).dividerColor.withOpacity(0.5)),
         if (!(user.emailVerified))
           ListTile(
             leading: const Icon(Icons.mark_email_unread_outlined),
@@ -327,7 +327,7 @@ class UserPage extends StatelessWidget {
             }
           },
         ),
-        const Divider(),
+        Divider(color: Theme.of(context).dividerColor.withOpacity(0.5)),
         ListTile(
           leading: const Icon(Icons.system_update_alt),
           title: const Text('Cek pembaruan'),

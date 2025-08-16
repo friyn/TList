@@ -1,17 +1,23 @@
 // main.dart
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:home_widget/home_widget.dart';
-
-import 'dart:convert';
 import 'dart:async';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'package:home_widget/home_widget.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'firebase_options.dart';
+import 'page/user.dart';
 import 'utils/app_update.dart';
 
-import 'package:tlist/page/user.dart';
+String _formatCurrency(double amount) {
+  final format = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+  return format.format(amount);
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,7 +36,48 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'TList',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        brightness: Brightness.light,
+        primaryColor: const Color(0xFF128C7E),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF128C7E),
+          brightness: Brightness.light,
+        ),
+        scaffoldBackgroundColor: Colors.white,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Color(0xFF128C7E),
+          elevation: 1,
+        ),
+        cardTheme: CardThemeData(
+          elevation: 1,
+          color: Colors.grey[50],
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        bottomNavigationBarTheme: BottomNavigationBarThemeData(
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF128C7E),
+          unselectedItemColor: Colors.grey[600],
+          elevation: 2,
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: Color(0xFF128C7E),
+          foregroundColor: Colors.white,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.grey.shade100,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFF128C7E), width: 2),
+          ),
+        ),
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
       home: const MainScreen(),
@@ -131,7 +178,7 @@ class Note {
     this.category = 'Personal',
     required this.createdAt,
     DateTime? updatedAt,
-    this.color = Colors.yellow,
+    this.color = const Color(0xFFFFF59D), // Warna default: light yellow
   }) : updatedAt = updatedAt ?? createdAt;
 
   Map<String, dynamic> toJson() {
@@ -153,8 +200,10 @@ class Note {
       content: json['content'],
       category: json['category'] ?? 'Personal',
       createdAt: DateTime.fromMillisecondsSinceEpoch(json['createdAt']),
-      updatedAt: DateTime.fromMillisecondsSinceEpoch(json['updatedAt']),
-      color: Color(json['color'] ?? Colors.yellow.value),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(json['updatedAt'])
+          : DateTime.fromMillisecondsSinceEpoch(json['createdAt']),
+      color: json['color'] != null ? Color(json['color']) : const Color(0xFFFFF59D), // Default to light yellow
     );
   }
 }
@@ -560,7 +609,6 @@ class _MainScreenState extends State<MainScreen> {
                   borderRadius: BorderRadius.circular(25),
                 ),
                 filled: true,
-                fillColor: Colors.white,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
               onChanged: (value) {
@@ -583,8 +631,6 @@ class _MainScreenState extends State<MainScreen> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF128C7E),
-        unselectedItemColor: Colors.grey,
         onTap: (index) {
           setState(() {
             _currentIndex = index;
@@ -661,13 +707,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
     }
   }
 
-  String _formatCurrency(double value) {
-    // Simple currency formatting without intl to avoid extra deps
-    final isNeg = value < 0;
-    final abs = value.abs();
-    final s = abs.toStringAsFixed(2);
-    return (isNeg ? '-' : '') + 'Rp ' + s;
-  }
 
   @override
   void initState() {
@@ -792,7 +831,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
               _saveTransactions();
               Navigator.pop(context);
             },
-            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+            child: Text('Hapus', style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       ),
@@ -812,8 +851,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 Expanded(
                   child: _buildSummaryCard(
                     'Pemasukan',
-                    totalIncome,
-                    Colors.green,
+                    _formatCurrency(totalIncome),
+                    Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                    Theme.of(context).colorScheme.primary,
                     Icons.trending_up,
                   ),
                 ),
@@ -821,8 +861,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 Expanded(
                   child: _buildSummaryCard(
                     'Saldo',
-                    balance,
-                    balance >= 0 ? Colors.green : Colors.red,
+                    _formatCurrency(balance),
+                    (balance >= 0 ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error).withOpacity(0.1),
+                    balance >= 0 ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
                     Icons.account_balance_wallet,
                   ),
                 ),
@@ -830,8 +871,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 Expanded(
                   child: _buildSummaryCard(
                     'Pengeluaran',
-                    totalExpense,
-                    Colors.red,
+                    _formatCurrency(totalExpense),
+                    Theme.of(context).colorScheme.error.withOpacity(0.1),
+                    Theme.of(context).colorScheme.error,
                     Icons.trending_down,
                   ),
                 ),
@@ -893,18 +935,18 @@ class _FinanceScreenState extends State<FinanceScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.receipt_outlined, size: 64, color: Colors.grey[400]),
+                              Icon(Icons.receipt_outlined, size: 64, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5)),
                               const SizedBox(height: 16),
                               Text(
                                 widget.searchQuery.isNotEmpty
                                     ? 'Tidak ada transaksi yang cocok'
                                     : 'Belum ada transaksi',
-                                style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                                style: TextStyle(fontSize: 18, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7)),
                               ),
                               if (widget.searchQuery.isEmpty)
                                 Text(
                                   'Tap + untuk menambah transaksi baru',
-                                  style: TextStyle(color: Colors.grey[500]),
+                                  style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6)),
                                 ),
                             ],
                           ),
@@ -936,7 +978,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
     );
   }
 
-  Widget _buildSummaryCard(String title, double amount, Color color, IconData icon) {
+  Widget _buildSummaryCard(String title, String amount, Color backgroundColor, Color color, IconData icon) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -950,7 +992,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Rp ${amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
+              amount,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
@@ -986,10 +1028,10 @@ class TransactionCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 4.0),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: isIncome ? Colors.green.shade100 : Colors.red.shade100,
+          backgroundColor: isIncome ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : Theme.of(context).colorScheme.error.withOpacity(0.1),
           child: Icon(
             isIncome ? Icons.trending_up : Icons.trending_down,
-            color: isIncome ? Colors.green : Colors.red,
+            color: isIncome ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
           ),
         ),
         title: Text(
@@ -1007,21 +1049,21 @@ class TransactionCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: isIncome ? Colors.green.shade100 : Colors.red.shade100,
+                    color: isIncome ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : Theme.of(context).colorScheme.error.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     transaction.category,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isIncome ? Colors.green.shade700 : Colors.red.shade700,
+                      color: isIncome ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
                     ),
                   ),
                 ),
                 const Spacer(),
                 Text(
                   '${transaction.createdAt.day}/${transaction.createdAt.month}/${transaction.createdAt.year}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6)),
                 ),
               ],
             ),
@@ -1035,10 +1077,10 @@ class TransactionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '${isIncome ? '+' : '-'}Rp ${transaction.amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
+                  _formatCurrency(transaction.amount),
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: isIncome ? Colors.green : Colors.red,
+                    color: isIncome ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
                     fontSize: 14,
                   ),
                 ),
@@ -1059,11 +1101,11 @@ class TransactionCard extends StatelessWidget {
                 ),
                 PopupMenuItem(
                   onTap: onDelete,
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.delete, color: Colors.red, size: 20),
-                      SizedBox(width: 8),
-                      Text('Hapus', style: TextStyle(color: Colors.red)),
+                      Icon(Icons.delete, color: Theme.of(context).colorScheme.error, size: 20),
+                      const SizedBox(width: 8),
+                      Text('Hapus', style: TextStyle(color: Theme.of(context).colorScheme.error)),
                     ],
                   ),
                 ),
@@ -1359,7 +1401,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
               _saveTasks();
               Navigator.pop(context);
             },
-            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+            child: Text('Hapus', style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       ),
@@ -1598,7 +1640,7 @@ class _NotesScreenState extends State<NotesScreen> {
               _saveNotes();
               Navigator.pop(context);
             },
-            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+            child: Text('Hapus', style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       ),
