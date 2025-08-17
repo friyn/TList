@@ -1922,14 +1922,14 @@ class _AddEditNoteDialogState extends State<AddEditNoteDialog> {
   late Color _selectedColor;
 
   final List<Color> noteColors = [
-    Colors.yellow,
+    Colors.white,
+    Colors.red.shade600,
     Colors.orange,
-    Colors.pink.shade200,
-    Colors.purple.shade200,
-    Colors.blue.shade200,
-    Colors.green.shade200,
-    Colors.teal.shade200,
-    Colors.grey.shade300,
+    Colors.yellow.shade800,
+    Colors.green.shade600,
+    Colors.blue.shade600,
+    Colors.deePurple,
+    Colors.grey,
   ];
 
   @override
