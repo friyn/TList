@@ -1,9 +1,84 @@
 // main.dart
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 import 'dart:convert';
 
-void main() {
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:home_widget/home_widget.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'firebase_options.dart';
+import 'page/user.dart';
+import 'utils/app_update.dart';
+
+String _formatCurrency(double amount) {
+  final format = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+  return format.format(amount);
+}
+
+// Custom formatter untuk input angka dengan pemisah ribuan
+class ThousandsSeparatorInputFormatter extends TextInputFormatter {
+  static const _separator = '.';
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Hapus semua karakter non-digit
+    String digitsOnly = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+    
+    if (digitsOnly.isEmpty) {
+      return const TextEditingValue();
+    }
+
+    // Format dengan pemisah ribuan
+    String formatted = _addThousandsSeparator(digitsOnly);
+    
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+
+  String _addThousandsSeparator(String value) {
+    if (value.length <= 3) return value;
+    
+    String result = '';
+    int counter = 0;
+    
+    for (int i = value.length - 1; i >= 0; i--) {
+      if (counter == 3) {
+        result = _separator + result;
+        counter = 0;
+      }
+      result = value[i] + result;
+      counter++;
+    }
+    
+    return result;
+  }
+}
+
+// Helper function untuk convert formatted text ke double
+double _parseFormattedAmount(String formattedText) {
+  String digitsOnly = formattedText.replaceAll(RegExp(r'[^\d]'), '');
+  return digitsOnly.isEmpty ? 0.0 : double.parse(digitsOnly);
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
+  // Initialize home widget
+  await HomeWidget.setAppGroupId('group.com.friyn.tlist');
+  
   runApp(const MyApp());
 }
 
@@ -16,7 +91,48 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'TList',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        brightness: Brightness.light,
+        primaryColor: const Color(0xFF128C7E),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF128C7E),
+          brightness: Brightness.light,
+        ),
+        scaffoldBackgroundColor: Colors.white,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Color(0xFF128C7E),
+          elevation: 1,
+        ),
+        cardTheme: CardThemeData(
+          elevation: 1,
+          color: Colors.grey[50],
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        bottomNavigationBarTheme: BottomNavigationBarThemeData(
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF128C7E),
+          unselectedItemColor: Colors.grey[600],
+          elevation: 2,
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: Color(0xFF128C7E),
+          foregroundColor: Colors.white,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.grey.shade100,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFF128C7E), width: 2),
+          ),
+        ),
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
       home: const MainScreen(),
@@ -117,7 +233,7 @@ class Note {
     this.category = 'Personal',
     required this.createdAt,
     DateTime? updatedAt,
-    this.color = Colors.yellow,
+    this.color = const Color(0xFFFFF59D), // Warna default: light yellow
   }) : updatedAt = updatedAt ?? createdAt;
 
   Map<String, dynamic> toJson() {
@@ -139,8 +255,10 @@ class Note {
       content: json['content'],
       category: json['category'] ?? 'Personal',
       createdAt: DateTime.fromMillisecondsSinceEpoch(json['createdAt']),
-      updatedAt: DateTime.fromMillisecondsSinceEpoch(json['updatedAt']),
-      color: Color(json['color'] ?? Colors.yellow.value),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(json['updatedAt'])
+          : DateTime.fromMillisecondsSinceEpoch(json['createdAt']),
+      color: json['color'] != null ? Color(json['color']) : const Color(0xFFFFF59D), // Default to light yellow
     );
   }
 }
@@ -202,50 +320,132 @@ class DataService {
 
   // Tasks (tetap sama)
   static Future<List<Task>> loadTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? tasksJson = prefs.getString(_tasksKey);
-    if (tasksJson == null) return [];
-
-    final List<dynamic> tasksList = json.decode(tasksJson);
-    return tasksList.map((task) => Task.fromJson(task)).toList();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('tasks')
+          .get();
+      return snap.docs.map((d) => Task.fromJson(d.data())).toList();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String? tasksJson = prefs.getString(_tasksKey);
+      if (tasksJson == null) return [];
+      final List<dynamic> tasksList = json.decode(tasksJson);
+      return tasksList.map((task) => Task.fromJson(task)).toList();
+    }
   }
 
   static Future<void> saveTasks(List<Task> tasks) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String tasksJson = json.encode(tasks.map((task) => task.toJson()).toList());
-    await prefs.setString(_tasksKey, tasksJson);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final col = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('tasks');
+      final batch = FirebaseFirestore.instance.batch();
+      // clear existing by fetching and deleting, then re-add
+      final existing = await col.get();
+      for (final doc in existing.docs) {
+        batch.delete(doc.reference);
+      }
+      for (final t in tasks) {
+        final ref = col.doc(t.id);
+        batch.set(ref, t.toJson());
+      }
+      await batch.commit();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String tasksJson = json.encode(tasks.map((task) => task.toJson()).toList());
+      await prefs.setString(_tasksKey, tasksJson);
+    }
   }
 
   // Notes (tetap sama)
   static Future<List<Note>> loadNotes() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? notesJson = prefs.getString(_notesKey);
-    if (notesJson == null) return [];
-
-    final List<dynamic> notesList = json.decode(notesJson);
-    return notesList.map((note) => Note.fromJson(note)).toList();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('notes')
+          .get();
+      return snap.docs.map((d) => Note.fromJson(d.data())).toList();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String? notesJson = prefs.getString(_notesKey);
+      if (notesJson == null) return [];
+      final List<dynamic> notesList = json.decode(notesJson);
+      return notesList.map((note) => Note.fromJson(note)).toList();
+    }
   }
 
   static Future<void> saveNotes(List<Note> notes) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String notesJson = json.encode(notes.map((note) => note.toJson()).toList());
-    await prefs.setString(_notesKey, notesJson);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final col = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('notes');
+      final batch = FirebaseFirestore.instance.batch();
+      final existing = await col.get();
+      for (final doc in existing.docs) {
+        batch.delete(doc.reference);
+      }
+      for (final n in notes) {
+        final ref = col.doc(n.id);
+        batch.set(ref, n.toJson());
+      }
+      await batch.commit();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String notesJson = json.encode(notes.map((note) => note.toJson()).toList());
+      await prefs.setString(_notesKey, notesJson);
+    }
   }
 
   // Transactions (BARU)
   static Future<List<Transaction>> loadTransactions() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? transactionsJson = prefs.getString(_transactionsKey);
-    if (transactionsJson == null) return [];
-
-    final List<dynamic> transactionsList = json.decode(transactionsJson);
-    return transactionsList.map((transaction) => Transaction.fromJson(transaction)).toList();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('transactions')
+          .get();
+      return snap.docs.map((d) => Transaction.fromJson(d.data())).toList();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String? transactionsJson = prefs.getString(_transactionsKey);
+      if (transactionsJson == null) return [];
+      final List<dynamic> transactionsList = json.decode(transactionsJson);
+      return transactionsList.map((transaction) => Transaction.fromJson(transaction)).toList();
+    }
   }
 
   static Future<void> saveTransactions(List<Transaction> transactions) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String transactionsJson = json.encode(transactions.map((transaction) => transaction.toJson()).toList());
-    await prefs.setString(_transactionsKey, transactionsJson);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final col = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('transactions');
+      final batch = FirebaseFirestore.instance.batch();
+      final existing = await col.get();
+      for (final doc in existing.docs) {
+        batch.delete(doc.reference);
+      }
+      for (final tr in transactions) {
+        final ref = col.doc(tr.id);
+        batch.set(ref, tr.toJson());
+      }
+      await batch.commit();
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final String transactionsJson = json.encode(transactions.map((transaction) => transaction.toJson()).toList());
+      await prefs.setString(_transactionsKey, transactionsJson);
+    }
   }
 
   // Categories
@@ -281,15 +481,166 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   final TextEditingController _searchController = TextEditingController();
+  late PageController _pageController;
   String _searchQuery = '';
+  bool _loginPromptShown = false;
+  // Optional: URL ke manifest update (JSON) yang di-host di GitHub Pages/Releases.
+  // Kosongkan jika tidak ingin mengaktifkan fitur update popup.
+  static const String _updateManifestUrl = 'https://tlistserver.web.app/update.json';
 
-  final List<String> _titles = ['To-Do List', 'My Notes', 'Keuangan'];
+  final List<String> _titles = ['Tasks', 'Notes', 'Keuangan'];
+
+  // Auth subscription for auto refresh on login/logout/register
+  StreamSubscription<User?>? _authSub;
+  bool _pendingAuthRefresh = false;
+
+  // Global keys to control refresh on each tab
+  final GlobalKey<_TodoListScreenState> _todoKey = GlobalKey<_TodoListScreenState>();
+  final GlobalKey<_NotesScreenState> _notesKey = GlobalKey<_NotesScreenState>();
+  final GlobalKey<_FinanceScreenState> _financeKey = GlobalKey<_FinanceScreenState>();
+
+  // Centralized refresh for all tabs
+  Future<void> _refreshAll() async {
+    await Future.wait([
+      _todoKey.currentState?.refresh() ?? Future.value(),
+      _notesKey.currentState?.refresh() ?? Future.value(),
+      _financeKey.currentState?.refresh() ?? Future.value(),
+    ]);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _currentIndex);
+    // Listen to auth state changes and trigger global refresh (next frame, debounced)
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((_) {
+      if (!mounted || _pendingAuthRefresh) return;
+      _pendingAuthRefresh = true;
+      try {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          try {
+            if (mounted) {
+              await _refreshAll();
+            }
+          } catch (e, st) {
+            debugPrint('Auth refresh error: $e\n$st');
+          } finally {
+            _pendingAuthRefresh = false;
+          }
+        });
+      } catch (e, st) {
+        debugPrint('Scheduling auth refresh failed: $e\n$st');
+        _pendingAuthRefresh = false;
+      }
+    });
+    // Tampilkan popup benefit login setelah frame pertama agar context siap
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeShowLoginPrompt();
+    });
+    // Cek pembaruan aplikasi (cross-platform) setelah frame pertama
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_updateManifestUrl.isNotEmpty) {
+        AppUpdate.checkAndPrompt(
+          context,
+          config: const AppUpdateConfig(manifestUrl: _updateManifestUrl),
+        );
+      }
+    });
+  }
+
+  Future<void> _maybeShowLoginPrompt() async {
+    if (_loginPromptShown) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) return; // sudah login, tidak perlu prompt
+    final prefs = await SharedPreferences.getInstance();
+    final seen = prefs.getBool('seen_login_benefit_prompt') ?? false;
+    if (seen) {
+      _loginPromptShown = true;
+      return;
+    }
+    _loginPromptShown = true;
+    if (!mounted) return;
+    bool doNotShowAgain = false;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Login ke TList'),
+              content: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Dengan login kamu bisa'),
+                    const SizedBox(height: 8),
+                    const Text('- Sinkronisasi data ke cloud'),
+                    const Text('- Akses data di banyak perangkat'),
+                    const Text('- Cadangan otomatis'),
+                    const Text(''),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      value: doNotShowAgain,
+                      onChanged: (v) {
+                        setStateDialog(() {
+                          doNotShowAgain = v ?? false;
+                        });
+                      },
+                      title: const Text('Jangan tampilkan lagi'),
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () async {
+                    final p = await SharedPreferences.getInstance();
+                    await p.setBool('seen_login_benefit_prompt', doNotShowAgain);
+                    if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+                  },
+                  child: const Text('Nanti saja'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final p = await SharedPreferences.getInstance();
+                    await p.setBool('seen_login_benefit_prompt', doNotShowAgain);
+                    if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+                    if (!mounted) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const UserPage()),
+                    );
+                  },
+                  child: const Text('Ya, Login'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_currentIndex]),
+        actions: [
+          const SizedBox(height: 16),
+          IconButton(
+            icon: const Icon(Icons.person),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const UserPage()),
+              );
+            },
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(
@@ -315,7 +666,6 @@ class _MainScreenState extends State<MainScreen> {
                   borderRadius: BorderRadius.circular(25),
                 ),
                 filled: true,
-                fillColor: Colors.white,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
               onChanged: (value) {
@@ -327,31 +677,36 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ),
       ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          TodoListScreen(searchQuery: _searchQuery),
-          NotesScreen(searchQuery: _searchQuery),
-          FinanceScreen(searchQuery: _searchQuery), // Screen baru
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: Colors.blue,
-        unselectedItemColor: Colors.grey,
-        onTap: (index) {
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) {
           setState(() {
             _currentIndex = index;
             _searchController.clear();
             _searchQuery = '';
           });
         },
+        children: [
+          TodoListScreen(key: _todoKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll),
+          NotesScreen(key: _notesKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll),
+          FinanceScreen(key: _financeKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll),
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        type: BottomNavigationBarType.fixed,
+        onTap: (index) {
+          _pageController.animateToPage(
+            index,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        },
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.check_circle_outline),
             activeIcon: Icon(Icons.check_circle),
-            label: 'To-Do',
+            label: 'Tasks',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.note_outlined),
@@ -370,7 +725,9 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _searchController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 }
@@ -378,8 +735,9 @@ class _MainScreenState extends State<MainScreen> {
 // Finance Screen (BARU)
 class FinanceScreen extends StatefulWidget {
   final String searchQuery;
+  final Future<void> Function()? onGlobalRefresh;
   
-  const FinanceScreen({Key? key, required this.searchQuery}) : super(key: key);
+  const FinanceScreen({Key? key, required this.searchQuery, this.onGlobalRefresh}) : super(key: key);
 
   @override
   State<FinanceScreen> createState() => _FinanceScreenState();
@@ -390,6 +748,31 @@ class _FinanceScreenState extends State<FinanceScreen> {
   List<String> incomeCategories = [];
   List<String> expenseCategories = [];
   String selectedFilter = 'Semua'; // 'Semua', 'Pemasukan', 'Pengeluaran'
+  bool isLoading = true;
+
+  double get _balance {
+    double income = 0;
+    double expense = 0;
+    for (final t in transactions) {
+      if (t.type == 'income') {
+        income += t.amount;
+      } else if (t.type == 'expense') {
+        expense += t.amount;
+      }
+    }
+    return income - expense;
+  }
+
+  Future<void> _updateAndroidFinanceWidget() async {
+    try {
+      final balanceText = _formatCurrency(_balance);
+      await HomeWidget.saveWidgetData<String>('balance', balanceText);
+      await HomeWidget.updateWidget(name: 'FinanceWidgetProvider');
+    } catch (_) {
+      // ignore widget update errors gracefully
+    }
+  }
+
 
   @override
   void initState() {
@@ -398,6 +781,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
   }
 
   Future<void> _loadData() async {
+    setState(() {
+      isLoading = true;
+    });
+    
     final loadedTransactions = await DataService.loadTransactions();
     final loadedIncomeCategories = await DataService.loadIncomeCategories();
     final loadedExpenseCategories = await DataService.loadExpenseCategories();
@@ -406,11 +793,17 @@ class _FinanceScreenState extends State<FinanceScreen> {
       transactions = loadedTransactions;
       incomeCategories = loadedIncomeCategories;
       expenseCategories = loadedExpenseCategories;
+      isLoading = false;
     });
+    await _updateAndroidFinanceWidget();
   }
+
+  // Expose public refresh for global trigger
+  Future<void> refresh() => _loadData();
 
   Future<void> _saveTransactions() async {
     await DataService.saveTransactions(transactions);
+    await _updateAndroidFinanceWidget();
   }
 
   List<Transaction> get filteredTransactions {
@@ -509,7 +902,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
               _saveTransactions();
               Navigator.pop(context);
             },
-            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+            child: Text('Hapus', style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       ),
@@ -518,6 +911,21 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Memuat data keuangan...'),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       body: Column(
         children: [
@@ -529,8 +937,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 Expanded(
                   child: _buildSummaryCard(
                     'Pemasukan',
-                    totalIncome,
-                    Colors.green,
+                    _formatCurrency(totalIncome),
+                    Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                    Theme.of(context).colorScheme.primary,
                     Icons.trending_up,
                   ),
                 ),
@@ -538,8 +947,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 Expanded(
                   child: _buildSummaryCard(
                     'Saldo',
-                    balance,
-                    balance >= 0 ? Colors.green : Colors.red,
+                    _formatCurrency(balance),
+                    (balance >= 0 ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error).withOpacity(0.1),
+                    balance >= 0 ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
                     Icons.account_balance_wallet,
                   ),
                 ),
@@ -547,8 +957,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 Expanded(
                   child: _buildSummaryCard(
                     'Pengeluaran',
-                    totalExpense,
-                    Colors.red,
+                    _formatCurrency(totalExpense),
+                    Theme.of(context).colorScheme.error.withOpacity(0.1),
+                    Theme.of(context).colorScheme.error,
                     Icons.trending_down,
                   ),
                 ),
@@ -598,50 +1009,62 @@ class _FinanceScreenState extends State<FinanceScreen> {
           
           // Transactions List
           Expanded(
-            child: filteredTransactions.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+            child: RefreshIndicator(
+              onRefresh: widget.onGlobalRefresh ?? _loadData,
+              child: filteredTransactions.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
                       children: [
-                        Icon(Icons.receipt_outlined, size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          widget.searchQuery.isNotEmpty
-                              ? 'Tidak ada transaksi yang cocok'
-                              : 'Belum ada transaksi',
-                          style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                        ),
-                        if (widget.searchQuery.isEmpty)
-                          Text(
-                            'Tap + untuk menambah transaksi baru',
-                            style: TextStyle(color: Colors.grey[500]),
+                        const SizedBox(height: 120),
+                        Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.receipt_outlined, size: 64, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5)),
+                              const SizedBox(height: 16),
+                              Text(
+                                widget.searchQuery.isNotEmpty
+                                    ? 'Tidak ada transaksi yang cocok'
+                                    : 'Belum ada transaksi',
+                                style: TextStyle(fontSize: 18, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7)),
+                              ),
+                              if (widget.searchQuery.isEmpty)
+                                Text(
+                                  'Tap + untuk menambah transaksi baru',
+                                  style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6)),
+                                ),
+                            ],
                           ),
+                        ),
                       ],
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
+                      itemCount: filteredTransactions.length,
+                      itemBuilder: (context, index) {
+                        final transaction = filteredTransactions[index];
+                        return TransactionCard(
+                          transaction: transaction,
+                          onEdit: () => _editTransaction(transaction),
+                          onDelete: () => _deleteTransaction(transaction),
+                        );
+                      },
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16.0),
-                    itemCount: filteredTransactions.length,
-                    itemBuilder: (context, index) {
-                      final transaction = filteredTransactions[index];
-                      return TransactionCard(
-                        transaction: transaction,
-                        onEdit: () => _editTransaction(transaction),
-                        onDelete: () => _deleteTransaction(transaction),
-                      );
-                    },
-                  ),
+            ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab-finance',
         onPressed: () => _addTransaction('income'),
         child: const Icon(Icons.add),
       ),
     );
   }
 
-  Widget _buildSummaryCard(String title, double amount, Color color, IconData icon) {
+  Widget _buildSummaryCard(String title, String amount, Color backgroundColor, Color color, IconData icon) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -655,7 +1078,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Rp ${amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
+              amount,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
@@ -691,10 +1114,10 @@ class TransactionCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 4.0),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: isIncome ? Colors.green.shade100 : Colors.red.shade100,
+          backgroundColor: isIncome ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : Theme.of(context).colorScheme.error.withOpacity(0.1),
           child: Icon(
             isIncome ? Icons.trending_up : Icons.trending_down,
-            color: isIncome ? Colors.green : Colors.red,
+            color: isIncome ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
           ),
         ),
         title: Text(
@@ -712,21 +1135,21 @@ class TransactionCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: isIncome ? Colors.green.shade100 : Colors.red.shade100,
+                    color: isIncome ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : Theme.of(context).colorScheme.error.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     transaction.category,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isIncome ? Colors.green.shade700 : Colors.red.shade700,
+                      color: isIncome ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
                     ),
                   ),
                 ),
                 const Spacer(),
                 Text(
                   '${transaction.createdAt.day}/${transaction.createdAt.month}/${transaction.createdAt.year}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6)),
                 ),
               ],
             ),
@@ -740,10 +1163,10 @@ class TransactionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '${isIncome ? '+' : '-'}Rp ${transaction.amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
+                  _formatCurrency(transaction.amount),
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: isIncome ? Colors.green : Colors.red,
+                    color: isIncome ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
                     fontSize: 14,
                   ),
                 ),
@@ -751,10 +1174,18 @@ class TransactionCard extends StatelessWidget {
             ),
             PopupMenuButton(
               icon: const Icon(Icons.more_vert),
+              onSelected: (String value) {
+                if (value == 'edit') {
+                  // Defer to next microtask to ensure the popup has fully closed
+                  Future.microtask(onEdit);
+                } else if (value == 'delete') {
+                  Future.microtask(onDelete);
+                }
+              },
               itemBuilder: (context) => [
-                PopupMenuItem(
-                  onTap: onEdit,
-                  child: const Row(
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
                     children: [
                       Icon(Icons.edit, size: 20),
                       SizedBox(width: 8),
@@ -766,9 +1197,9 @@ class TransactionCard extends StatelessWidget {
                   onTap: onDelete,
                   child: const Row(
                     children: [
-                      Icon(Icons.delete, color: Colors.red, size: 20),
-                      SizedBox(width: 8),
-                      Text('Hapus', style: TextStyle(color: Colors.red)),
+                      Icon(Icons.delete, color: Theme.of(context).colorScheme.error, size: 20),
+                      const SizedBox(width: 8),
+                      Text('Hapus', style: TextStyle(color: Theme.of(context).colorScheme.error)),
                     ],
                   ),
                 ),
@@ -829,8 +1260,8 @@ class _AddEditTransactionDialogState extends State<AddEditTransactionDialog> {
       return;
     }
 
-    final amount = double.tryParse(_amountController.text.trim());
-    if (amount == null || amount <= 0) {
+    final amount = _parseFormattedAmount(_amountController.text.trim());
+    if (amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Jumlah harus berupa angka yang valid!')),
       );
@@ -869,71 +1300,70 @@ class _AddEditTransactionDialogState extends State<AddEditTransactionDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (widget.transaction == null)
-                Row(
-                  children: [
-                    Expanded(
-                      child: RadioListTile<String>(
-                        dense: true,
-                        title: const Text('Pemasukan'),
-                        value: 'income',
-                        groupValue: _transactionType,
-                        onChanged: (value) {
-                          setState(() {
-                            _transactionType = value!;
-                            _selectedCategory = (value == 'income' ? widget.incomeCategories : widget.expenseCategories).first;
-                          });
-                        },
-                      ),
-                    ),
-                    Expanded(
-                      child: RadioListTile<String>(
-                        dense: true,
-                        title: const Text('Pengeluaran'),
-                        value: 'expense',
-                        groupValue: _transactionType,
-                        onChanged: (value) {
-                          setState(() {
-                            _transactionType = value!;
-                            _selectedCategory = (value == 'income' ? widget.incomeCategories : widget.expenseCategories).first;
-                          });
-                        },
-                      ),
-                    ),
-                  ],
+              DropdownButtonFormField<String>(
+                value: _transactionType,
+                decoration: InputDecoration(
+                  labelText: 'Jenis Transaksi',
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
+                items: const [
+                  DropdownMenuItem(child: Text('Pemasukan'), value: 'income'),
+                  DropdownMenuItem(child: Text('Pengeluaran'), value: 'expense'),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _transactionType = value!;
+                    _selectedCategory = (value == 'income' ? widget.incomeCategories : widget.expenseCategories).first;
+                  });
+                },
+              ),
               const SizedBox(height: 16),
               TextField(
                 controller: _titleController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Judul Transaksi',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _amountController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
+                inputFormatters: [
+                  ThousandsSeparatorInputFormatter(),
+                ],
+                decoration: InputDecoration(
                   labelText: 'Jumlah (Rp)',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                   prefixText: 'Rp ',
+                  hintText: '1.000.000',
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _descriptionController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Deskripsi (opsional)',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
                 maxLines: 3,
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: _selectedCategory,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Kategori',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
                 items: categories.map((category) {
                   return DropdownMenuItem(
@@ -976,8 +1406,9 @@ class _AddEditTransactionDialogState extends State<AddEditTransactionDialog> {
 // Todo List Screen (tetap sama seperti sebelumnya)
 class TodoListScreen extends StatefulWidget {
   final String searchQuery;
+  final Future<void> Function()? onGlobalRefresh;
   
-  const TodoListScreen({Key? key, required this.searchQuery}) : super(key: key);
+  const TodoListScreen({Key? key, required this.searchQuery, this.onGlobalRefresh}) : super(key: key);
 
   @override
   State<TodoListScreen> createState() => _TodoListScreenState();
@@ -987,6 +1418,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
   List<Task> tasks = [];
   List<String> categories = [];
   String selectedCategory = 'Semua';
+  bool isLoading = true;
 
   @override
   void initState() {
@@ -995,13 +1427,21 @@ class _TodoListScreenState extends State<TodoListScreen> {
   }
 
   Future<void> _loadData() async {
+    setState(() {
+      isLoading = true;
+    });
+    
     final loadedTasks = await DataService.loadTasks();
     final loadedCategories = await DataService.loadTaskCategories();
     setState(() {
       tasks = loadedTasks;
       categories = ['Semua'] + loadedCategories;
+      isLoading = false;
     });
   }
+
+  // Expose public refresh for global trigger
+  Future<void> refresh() => _loadData();
 
   Future<void> _saveTasks() async {
     await DataService.saveTasks(tasks);
@@ -1079,7 +1519,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
               _saveTasks();
               Navigator.pop(context);
             },
-            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+            child: Text('Hapus', style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       ),
@@ -1116,6 +1556,21 @@ class _TodoListScreenState extends State<TodoListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Memuat tasks...'),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       body: Column(
         children: [
@@ -1149,45 +1604,57 @@ class _TodoListScreenState extends State<TodoListScreen> {
             ),
           ),
           Expanded(
-            child: filteredTasks.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+            child: RefreshIndicator(
+              onRefresh: widget.onGlobalRefresh ?? _loadData,
+              child: filteredTasks.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
                       children: [
-                        Icon(Icons.task_alt, size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          widget.searchQuery.isNotEmpty
-                              ? 'Tidak ada task yang cocok'
-                              : 'Belum ada task',
-                          style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                        ),
-                        if (widget.searchQuery.isEmpty)
-                          Text(
-                            'Tap + untuk menambah task baru',
-                            style: TextStyle(color: Colors.grey[500]),
+                        const SizedBox(height: 120),
+                        Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.task_alt, size: 64, color: Colors.grey[400]),
+                              const SizedBox(height: 16),
+                              Text(
+                                widget.searchQuery.isNotEmpty
+                                    ? 'Tidak ada task yang cocok'
+                                    : 'Belum ada task',
+                                style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                              ),
+                              if (widget.searchQuery.isEmpty)
+                                Text(
+                                  'Tap + untuk menambah task baru',
+                                  style: TextStyle(color: Colors.grey[500]),
+                                ),
+                            ],
                           ),
+                        ),
                       ],
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(8.0),
+                      itemCount: filteredTasks.length,
+                      itemBuilder: (context, index) {
+                        final task = filteredTasks[index];
+                        return TaskCard(
+                          task: task,
+                          onToggleComplete: () => _toggleTaskComplete(task),
+                          onToggleSubTaskComplete: (subTask) => _toggleSubTaskComplete(task, subTask),
+                          onEdit: () => _editTask(task),
+                          onDelete: () => _deleteTask(task),
+                        );
+                      },
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(8.0),
-                    itemCount: filteredTasks.length,
-                    itemBuilder: (context, index) {
-                      final task = filteredTasks[index];
-                      return TaskCard(
-                        task: task,
-                        onToggleComplete: () => _toggleTaskComplete(task),
-                        onToggleSubTaskComplete: (subTask) => _toggleSubTaskComplete(task, subTask),
-                        onEdit: () => _editTask(task),
-                        onDelete: () => _deleteTask(task),
-                      );
-                    },
-                  ),
+            ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab-tasks',
         onPressed: _addTask,
         child: const Icon(Icons.add),
       ),
@@ -1198,8 +1665,9 @@ class _TodoListScreenState extends State<TodoListScreen> {
 // Notes Screen (tetap sama seperti sebelumnya)
 class NotesScreen extends StatefulWidget {
   final String searchQuery;
+  final Future<void> Function()? onGlobalRefresh;
   
-  const NotesScreen({Key? key, required this.searchQuery}) : super(key: key);
+  const NotesScreen({Key? key, required this.searchQuery, this.onGlobalRefresh}) : super(key: key);
 
   @override
   State<NotesScreen> createState() => _NotesScreenState();
@@ -1209,6 +1677,7 @@ class _NotesScreenState extends State<NotesScreen> {
   List<Note> notes = [];
   List<String> categories = [];
   String selectedCategory = 'Semua';
+  bool isLoading = true;
   bool isGridView = false;
 
   @override
@@ -1218,13 +1687,21 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   Future<void> _loadData() async {
+    setState(() {
+      isLoading = true;
+    });
+    
     final loadedNotes = await DataService.loadNotes();
     final loadedCategories = await DataService.loadNoteCategories();
     setState(() {
       notes = loadedNotes;
       categories = ['Semua'] + loadedCategories;
+      isLoading = false;
     });
   }
+
+  // Expose public refresh for global trigger
+  Future<void> refresh() => _loadData();
 
   Future<void> _saveNotes() async {
     await DataService.saveNotes(notes);
@@ -1302,7 +1779,7 @@ class _NotesScreenState extends State<NotesScreen> {
               _saveNotes();
               Navigator.pop(context);
             },
-            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+            child: Text('Hapus', style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       ),
@@ -1311,6 +1788,21 @@ class _NotesScreenState extends State<NotesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Memuat notes...'),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       body: Column(
         children: [
@@ -1352,62 +1844,75 @@ class _NotesScreenState extends State<NotesScreen> {
             ),
           ),
           Expanded(
-            child: filteredNotes.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+            child: RefreshIndicator(
+              onRefresh: widget.onGlobalRefresh ?? _loadData,
+              child: filteredNotes.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
                       children: [
-                        Icon(Icons.note_outlined, size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          widget.searchQuery.isNotEmpty
-                              ? 'Tidak ada note yang cocok'
-                              : 'Belum ada note',
-                          style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                        ),
-                        if (widget.searchQuery.isEmpty)
-                          Text(
-                            'Tap + untuk menambah note baru',
-                            style: TextStyle(color: Colors.grey[500]),
+                        const SizedBox(height: 120),
+                        Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.note_outlined, size: 64, color: Colors.grey[400]),
+                              const SizedBox(height: 16),
+                              Text(
+                                widget.searchQuery.isNotEmpty
+                                    ? 'Tidak ada note yang cocok'
+                                    : 'Belum ada note',
+                                style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                              ),
+                              if (widget.searchQuery.isEmpty)
+                                Text(
+                                  'Tap + untuk menambah note baru',
+                                  style: TextStyle(color: Colors.grey[500]),
+                                ),
+                            ],
                           ),
-                      ],
-                    ),
-                  )
-                : isGridView
-                    ? GridView.builder(
-                        padding: const EdgeInsets.all(8.0),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 0.8,
-                          crossAxisSpacing: 8,
-                          mainAxisSpacing: 8,
                         ),
-                        itemCount: filteredNotes.length,
-                        itemBuilder: (context, index) {
-                          final note = filteredNotes[index];
-                          return NoteGridCard(
-                            note: note,
-                            onTap: () => _editNote(note),
-                            onDelete: () => _deleteNote(note),
-                          );
-                        },
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(8.0),
-                        itemCount: filteredNotes.length,
-                        itemBuilder: (context, index) {
-                          final note = filteredNotes[index];
-                          return NoteListCard(
-                            note: note,
-                            onTap: () => _editNote(note),
-                            onDelete: () => _deleteNote(note),
-                          );
-                        },
-                      ),
+                      ],
+                    )
+                  : isGridView
+                      ? GridView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(8.0),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            childAspectRatio: 0.8,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                          ),
+                          itemCount: filteredNotes.length,
+                          itemBuilder: (context, index) {
+                            final note = filteredNotes[index];
+                            return NoteGridCard(
+                              note: note,
+                              onTap: () => _editNote(note),
+                              onDelete: () => _deleteNote(note),
+                            );
+                          },
+                        )
+                      : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(8.0),
+                          itemCount: filteredNotes.length,
+                          itemBuilder: (context, index) {
+                            final note = filteredNotes[index];
+                            return NoteListCard(
+                              note: note,
+                              onTap: () => _editNote(note),
+                              onDelete: () => _deleteNote(note),
+                            );
+                          },
+                        ),
+            ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab-notes',
         onPressed: _addNote,
         child: const Icon(Icons.add),
       ),
@@ -1799,26 +2304,32 @@ class _AddEditTaskDialogState extends State<AddEditTaskDialog> {
             children: [
               TextField(
                 controller: _titleController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Judul Task',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _descriptionController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Deskripsi (opsional)',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
                 maxLines: 3,
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: _selectedCategory,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Kategori',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
                 items: widget.categories.map((category) {
                   return DropdownMenuItem(
@@ -1846,9 +2357,11 @@ class _AddEditTaskDialogState extends State<AddEditTaskDialog> {
                   Expanded(
                     child: TextField(
                       controller: _subTaskController,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: 'Tambah subtask',
-                        border: OutlineInputBorder(),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(25),
+                        ),
                       ),
                       onSubmitted: (_) => _addSubTask(),
                     ),
@@ -1976,17 +2489,21 @@ class _AddEditNoteDialogState extends State<AddEditNoteDialog> {
             children: [
               TextField(
                 controller: _titleController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Judul Note',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _contentController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Isi Note',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                   alignLabelWithHint: true,
                 ),
                 maxLines: 8,
@@ -1994,9 +2511,11 @@ class _AddEditNoteDialogState extends State<AddEditNoteDialog> {
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: _selectedCategory,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Kategori',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
                 items: widget.categories.map((category) {
                   return DropdownMenuItem(
@@ -2011,7 +2530,7 @@ class _AddEditNoteDialogState extends State<AddEditNoteDialog> {
                 },
               ),
               const SizedBox(height: 16),
-              const Align(
+              Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Warna Note:',
