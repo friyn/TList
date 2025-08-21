@@ -1,23 +1,84 @@
 // main.dart
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:home_widget/home_widget.dart';
-
-import 'dart:convert';
 import 'dart:async';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:home_widget/home_widget.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'firebase_options.dart';
+import 'page/user.dart';
 import 'utils/app_update.dart';
 
-import 'package:tlist/page/user.dart';
+String _formatCurrency(double amount) {
+  final format = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+  return format.format(amount);
+}
+
+// Custom formatter untuk input angka dengan pemisah ribuan
+class ThousandsSeparatorInputFormatter extends TextInputFormatter {
+  static const _separator = '.';
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Hapus semua karakter non-digit
+    String digitsOnly = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+    
+    if (digitsOnly.isEmpty) {
+      return const TextEditingValue();
+    }
+
+    // Format dengan pemisah ribuan
+    String formatted = _addThousandsSeparator(digitsOnly);
+    
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+
+  String _addThousandsSeparator(String value) {
+    if (value.length <= 3) return value;
+    
+    String result = '';
+    int counter = 0;
+    
+    for (int i = value.length - 1; i >= 0; i--) {
+      if (counter == 3) {
+        result = _separator + result;
+        counter = 0;
+      }
+      result = value[i] + result;
+      counter++;
+    }
+    
+    return result;
+  }
+}
+
+// Helper function untuk convert formatted text ke double
+double _parseFormattedAmount(String formattedText) {
+  String digitsOnly = formattedText.replaceAll(RegExp(r'[^\d]'), '');
+  return digitsOnly.isEmpty ? 0.0 : double.parse(digitsOnly);
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  
+  // Initialize home widget
+  await HomeWidget.setAppGroupId('group.com.friyn.tlist');
+  
   runApp(const MyApp());
 }
 
@@ -30,7 +91,48 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'TList',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        brightness: Brightness.light,
+        primaryColor: const Color(0xFF128C7E),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF128C7E),
+          brightness: Brightness.light,
+        ),
+        scaffoldBackgroundColor: Colors.white,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Color(0xFF128C7E),
+          elevation: 1,
+        ),
+        cardTheme: CardThemeData(
+          elevation: 1,
+          color: Colors.grey[50],
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        bottomNavigationBarTheme: BottomNavigationBarThemeData(
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF128C7E),
+          unselectedItemColor: Colors.grey[600],
+          elevation: 2,
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: Color(0xFF128C7E),
+          foregroundColor: Colors.white,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.grey.shade100,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFF128C7E), width: 2),
+          ),
+        ),
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
       home: const MainScreen(),
@@ -131,7 +233,7 @@ class Note {
     this.category = 'Personal',
     required this.createdAt,
     DateTime? updatedAt,
-    this.color = Colors.yellow,
+    this.color = const Color(0xFFFFF59D), // Warna default: light yellow
   }) : updatedAt = updatedAt ?? createdAt;
 
   Map<String, dynamic> toJson() {
@@ -153,8 +255,10 @@ class Note {
       content: json['content'],
       category: json['category'] ?? 'Personal',
       createdAt: DateTime.fromMillisecondsSinceEpoch(json['createdAt']),
-      updatedAt: DateTime.fromMillisecondsSinceEpoch(json['updatedAt']),
-      color: Color(json['color'] ?? Colors.yellow.value),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(json['updatedAt'])
+          : DateTime.fromMillisecondsSinceEpoch(json['createdAt']),
+      color: json['color'] != null ? Color(json['color']) : const Color(0xFFFFF59D), // Default to light yellow
     );
   }
 }
@@ -377,6 +481,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   final TextEditingController _searchController = TextEditingController();
+  late PageController _pageController;
   String _searchQuery = '';
   bool _loginPromptShown = false;
   // Optional: URL ke manifest update (JSON) yang di-host di GitHub Pages/Releases.
@@ -406,6 +511,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: _currentIndex);
     // Listen to auth state changes and trigger global refresh (next frame, debounced)
     _authSub = FirebaseAuth.instance.authStateChanges().listen((_) {
       if (!mounted || _pendingAuthRefresh) return;
@@ -560,7 +666,6 @@ class _MainScreenState extends State<MainScreen> {
                   borderRadius: BorderRadius.circular(25),
                 ),
                 filled: true,
-                fillColor: Colors.white,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
               onChanged: (value) {
@@ -572,25 +677,30 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ),
       ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          TodoListScreen(key: _todoKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll),
-          NotesScreen(key: _notesKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll),
-          FinanceScreen(key: _financeKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll), // Screen baru
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF128C7E),
-        unselectedItemColor: Colors.grey,
-        onTap: (index) {
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) {
           setState(() {
             _currentIndex = index;
             _searchController.clear();
             _searchQuery = '';
           });
+        },
+        children: [
+          TodoListScreen(key: _todoKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll),
+          NotesScreen(key: _notesKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll),
+          FinanceScreen(key: _financeKey, searchQuery: _searchQuery, onGlobalRefresh: _refreshAll),
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        type: BottomNavigationBarType.fixed,
+        onTap: (index) {
+          _pageController.animateToPage(
+            index,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
         },
         items: const [
           BottomNavigationBarItem(
@@ -617,6 +727,7 @@ class _MainScreenState extends State<MainScreen> {
   void dispose() {
     _authSub?.cancel();
     _searchController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 }
@@ -637,6 +748,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
   List<String> incomeCategories = [];
   List<String> expenseCategories = [];
   String selectedFilter = 'Semua'; // 'Semua', 'Pemasukan', 'Pengeluaran'
+  bool isLoading = true;
 
   double get _balance {
     double income = 0;
@@ -661,13 +773,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
     }
   }
 
-  String _formatCurrency(double value) {
-    // Simple currency formatting without intl to avoid extra deps
-    final isNeg = value < 0;
-    final abs = value.abs();
-    final s = abs.toStringAsFixed(2);
-    return (isNeg ? '-' : '') + 'Rp ' + s;
-  }
 
   @override
   void initState() {
@@ -676,6 +781,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
   }
 
   Future<void> _loadData() async {
+    setState(() {
+      isLoading = true;
+    });
+    
     final loadedTransactions = await DataService.loadTransactions();
     final loadedIncomeCategories = await DataService.loadIncomeCategories();
     final loadedExpenseCategories = await DataService.loadExpenseCategories();
@@ -684,6 +793,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
       transactions = loadedTransactions;
       incomeCategories = loadedIncomeCategories;
       expenseCategories = loadedExpenseCategories;
+      isLoading = false;
     });
     await _updateAndroidFinanceWidget();
   }
@@ -792,7 +902,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
               _saveTransactions();
               Navigator.pop(context);
             },
-            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+            child: Text('Hapus', style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       ),
@@ -801,6 +911,21 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Memuat data keuangan...'),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       body: Column(
         children: [
@@ -812,8 +937,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 Expanded(
                   child: _buildSummaryCard(
                     'Pemasukan',
-                    totalIncome,
-                    Colors.green,
+                    _formatCurrency(totalIncome),
+                    Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                    Theme.of(context).colorScheme.primary,
                     Icons.trending_up,
                   ),
                 ),
@@ -821,8 +947,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 Expanded(
                   child: _buildSummaryCard(
                     'Saldo',
-                    balance,
-                    balance >= 0 ? Colors.green : Colors.red,
+                    _formatCurrency(balance),
+                    (balance >= 0 ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error).withOpacity(0.1),
+                    balance >= 0 ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
                     Icons.account_balance_wallet,
                   ),
                 ),
@@ -830,8 +957,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 Expanded(
                   child: _buildSummaryCard(
                     'Pengeluaran',
-                    totalExpense,
-                    Colors.red,
+                    _formatCurrency(totalExpense),
+                    Theme.of(context).colorScheme.error.withOpacity(0.1),
+                    Theme.of(context).colorScheme.error,
                     Icons.trending_down,
                   ),
                 ),
@@ -893,18 +1021,18 @@ class _FinanceScreenState extends State<FinanceScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.receipt_outlined, size: 64, color: Colors.grey[400]),
+                              Icon(Icons.receipt_outlined, size: 64, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5)),
                               const SizedBox(height: 16),
                               Text(
                                 widget.searchQuery.isNotEmpty
                                     ? 'Tidak ada transaksi yang cocok'
                                     : 'Belum ada transaksi',
-                                style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                                style: TextStyle(fontSize: 18, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7)),
                               ),
                               if (widget.searchQuery.isEmpty)
                                 Text(
                                   'Tap + untuk menambah transaksi baru',
-                                  style: TextStyle(color: Colors.grey[500]),
+                                  style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6)),
                                 ),
                             ],
                           ),
@@ -936,7 +1064,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
     );
   }
 
-  Widget _buildSummaryCard(String title, double amount, Color color, IconData icon) {
+  Widget _buildSummaryCard(String title, String amount, Color backgroundColor, Color color, IconData icon) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -950,7 +1078,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Rp ${amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
+              amount,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
@@ -986,10 +1114,10 @@ class TransactionCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 4.0),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: isIncome ? Colors.green.shade100 : Colors.red.shade100,
+          backgroundColor: isIncome ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : Theme.of(context).colorScheme.error.withOpacity(0.1),
           child: Icon(
             isIncome ? Icons.trending_up : Icons.trending_down,
-            color: isIncome ? Colors.green : Colors.red,
+            color: isIncome ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
           ),
         ),
         title: Text(
@@ -1007,21 +1135,21 @@ class TransactionCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: isIncome ? Colors.green.shade100 : Colors.red.shade100,
+                    color: isIncome ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : Theme.of(context).colorScheme.error.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     transaction.category,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isIncome ? Colors.green.shade700 : Colors.red.shade700,
+                      color: isIncome ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
                     ),
                   ),
                 ),
                 const Spacer(),
                 Text(
                   '${transaction.createdAt.day}/${transaction.createdAt.month}/${transaction.createdAt.year}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6)),
                 ),
               ],
             ),
@@ -1035,10 +1163,10 @@ class TransactionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '${isIncome ? '+' : '-'}Rp ${transaction.amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
+                  _formatCurrency(transaction.amount),
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: isIncome ? Colors.green : Colors.red,
+                    color: isIncome ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
                     fontSize: 14,
                   ),
                 ),
@@ -1046,10 +1174,18 @@ class TransactionCard extends StatelessWidget {
             ),
             PopupMenuButton(
               icon: const Icon(Icons.more_vert),
+              onSelected: (String value) {
+                if (value == 'edit') {
+                  // Defer to next microtask to ensure the popup has fully closed
+                  Future.microtask(onEdit);
+                } else if (value == 'delete') {
+                  Future.microtask(onDelete);
+                }
+              },
               itemBuilder: (context) => [
-                PopupMenuItem(
-                  onTap: onEdit,
-                  child: const Row(
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
                     children: [
                       Icon(Icons.edit, size: 20),
                       SizedBox(width: 8),
@@ -1058,12 +1194,12 @@ class TransactionCard extends StatelessWidget {
                   ),
                 ),
                 PopupMenuItem(
-                  onTap: onDelete,
-                  child: const Row(
+                  value: 'delete',
+                  child: Row(
                     children: [
-                      Icon(Icons.delete, color: Colors.red, size: 20),
-                      SizedBox(width: 8),
-                      Text('Hapus', style: TextStyle(color: Colors.red)),
+                      Icon(Icons.delete, color: Theme.of(context).colorScheme.error, size: 20),
+                      const SizedBox(width: 8),
+                      Text('Hapus', style: TextStyle(color: Theme.of(context).colorScheme.error)),
                     ],
                   ),
                 ),
@@ -1124,8 +1260,8 @@ class _AddEditTransactionDialogState extends State<AddEditTransactionDialog> {
       return;
     }
 
-    final amount = double.tryParse(_amountController.text.trim());
-    if (amount == null || amount <= 0) {
+    final amount = _parseFormattedAmount(_amountController.text.trim());
+    if (amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Jumlah harus berupa angka yang valid!')),
       );
@@ -1166,6 +1302,12 @@ class _AddEditTransactionDialogState extends State<AddEditTransactionDialog> {
               if (widget.transaction == null)
               DropdownButtonFormField<String>(
                 value: _transactionType,
+                decoration: InputDecoration(
+                  labelText: 'Jenis Transaksi',
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
+                ),
                 items: const [
                   DropdownMenuItem(child: Text('Pemasukan'), value: 'income'),
                   DropdownMenuItem(child: Text('Pengeluaran'), value: 'expense'),
@@ -1180,36 +1322,48 @@ class _AddEditTransactionDialogState extends State<AddEditTransactionDialog> {
               const SizedBox(height: 16),
               TextField(
                 controller: _titleController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Judul Transaksi',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _amountController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
+                inputFormatters: [
+                  ThousandsSeparatorInputFormatter(),
+                ],
+                decoration: InputDecoration(
                   labelText: 'Jumlah (Rp)',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                   prefixText: 'Rp ',
+                  hintText: '1.000.000',
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _descriptionController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Deskripsi (opsional)',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
                 maxLines: 3,
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: _selectedCategory,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Kategori',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
                 items: categories.map((category) {
                   return DropdownMenuItem(
@@ -1264,6 +1418,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
   List<Task> tasks = [];
   List<String> categories = [];
   String selectedCategory = 'Semua';
+  bool isLoading = true;
 
   @override
   void initState() {
@@ -1272,11 +1427,16 @@ class _TodoListScreenState extends State<TodoListScreen> {
   }
 
   Future<void> _loadData() async {
+    setState(() {
+      isLoading = true;
+    });
+    
     final loadedTasks = await DataService.loadTasks();
     final loadedCategories = await DataService.loadTaskCategories();
     setState(() {
       tasks = loadedTasks;
       categories = ['Semua'] + loadedCategories;
+      isLoading = false;
     });
   }
 
@@ -1359,7 +1519,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
               _saveTasks();
               Navigator.pop(context);
             },
-            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+            child: Text('Hapus', style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       ),
@@ -1396,6 +1556,21 @@ class _TodoListScreenState extends State<TodoListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Memuat tasks...'),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       body: Column(
         children: [
@@ -1502,6 +1677,7 @@ class _NotesScreenState extends State<NotesScreen> {
   List<Note> notes = [];
   List<String> categories = [];
   String selectedCategory = 'Semua';
+  bool isLoading = true;
   bool isGridView = false;
 
   @override
@@ -1511,11 +1687,16 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   Future<void> _loadData() async {
+    setState(() {
+      isLoading = true;
+    });
+    
     final loadedNotes = await DataService.loadNotes();
     final loadedCategories = await DataService.loadNoteCategories();
     setState(() {
       notes = loadedNotes;
       categories = ['Semua'] + loadedCategories;
+      isLoading = false;
     });
   }
 
@@ -1598,7 +1779,7 @@ class _NotesScreenState extends State<NotesScreen> {
               _saveNotes();
               Navigator.pop(context);
             },
-            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+            child: Text('Hapus', style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       ),
@@ -1607,6 +1788,21 @@ class _NotesScreenState extends State<NotesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Memuat notes...'),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       body: Column(
         children: [
@@ -2108,26 +2304,32 @@ class _AddEditTaskDialogState extends State<AddEditTaskDialog> {
             children: [
               TextField(
                 controller: _titleController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Judul Task',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _descriptionController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Deskripsi (opsional)',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
                 maxLines: 3,
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: _selectedCategory,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Kategori',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
                 items: widget.categories.map((category) {
                   return DropdownMenuItem(
@@ -2155,9 +2357,11 @@ class _AddEditTaskDialogState extends State<AddEditTaskDialog> {
                   Expanded(
                     child: TextField(
                       controller: _subTaskController,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: 'Tambah subtask',
-                        border: OutlineInputBorder(),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(25),
+                        ),
                       ),
                       onSubmitted: (_) => _addSubTask(),
                     ),
@@ -2285,17 +2489,21 @@ class _AddEditNoteDialogState extends State<AddEditNoteDialog> {
             children: [
               TextField(
                 controller: _titleController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Judul Note',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _contentController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Isi Note',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                   alignLabelWithHint: true,
                 ),
                 maxLines: 8,
@@ -2303,9 +2511,11 @@ class _AddEditNoteDialogState extends State<AddEditNoteDialog> {
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: _selectedCategory,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Kategori',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
                 items: widget.categories.map((category) {
                   return DropdownMenuItem(
@@ -2320,7 +2530,7 @@ class _AddEditNoteDialogState extends State<AddEditNoteDialog> {
                 },
               ),
               const SizedBox(height: 16),
-              const Align(
+              Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Warna Note:',

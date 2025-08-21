@@ -46,7 +46,7 @@ class UserPage extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(
-          'Kamu Belum Log In',
+          'Kamu Belum Login',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
@@ -74,7 +74,7 @@ class UserPage extends StatelessWidget {
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           child: const Text('Daftar'),
         ),
-        const Divider(),
+        Divider(color: Theme.of(context).dividerColor.withOpacity(0.5)),
         ListTile(
           leading: const Icon(Icons.system_update_alt),
           title: const Text('Cek pembaruan'),
@@ -172,7 +172,7 @@ class UserPage extends StatelessWidget {
           title: Text(displayName),
           subtitle: Text(email),
         ),
-        const Divider(),
+        Divider(color: Theme.of(context).dividerColor.withOpacity(0.5)),
         if (!(user.emailVerified))
           ListTile(
             leading: const Icon(Icons.mark_email_unread_outlined),
@@ -319,15 +319,38 @@ class UserPage extends StatelessWidget {
           leading: const Icon(Icons.logout),
           title: const Text('Keluar'),
           onTap: () async {
-            await FirebaseAuth.instance.signOut();
-            if (context.mounted) {
+            final confirm = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Konfirmasi'),
+                content: const Text('Yakin ingin keluar?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                    child: const Text('Batal'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.error,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Keluar'),
+                  ),
+                ],
+              ),
+            );
+
+            if (confirm == true) {
+              await FirebaseAuth.instance.signOut();
+              if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Signed out')),
               );
             }
           },
         ),
-        const Divider(),
+        Divider(color: Theme.of(context).dividerColor.withOpacity(0.5)),
         ListTile(
           leading: const Icon(Icons.system_update_alt),
           title: const Text('Cek pembaruan'),
@@ -405,23 +428,38 @@ class UserPage extends StatelessWidget {
     final result = await showDialog<String>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: Text(title),
-          content: TextField(
-            controller: controller,
-            obscureText: obscure,
-            decoration: InputDecoration(hintText: hint),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Batal'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, controller.text.trim()),
-              child: const Text('OK'),
-            ),
-          ],
+        bool isObscure = obscure;
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            return AlertDialog(
+              title: Text(title),
+              content: TextField(
+                controller: controller,
+                obscureText: isObscure,
+                decoration: InputDecoration(
+                  hintText: hint,
+                  suffixIcon: obscure
+                      ? IconButton(
+                          icon: Icon(isObscure ? Icons.visibility_off : Icons.visibility),
+                          onPressed: () => setState(() => isObscure = !isObscure),
+                        )
+                      : null,
+                ),
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => Navigator.pop(ctx, controller.text.trim()),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Batal'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -430,4 +468,3 @@ class UserPage extends StatelessWidget {
   }
 
 }
-

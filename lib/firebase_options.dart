@@ -51,7 +51,8 @@ class DefaultFirebaseOptions {
     appId: '1:582262425557:web:bb5480d783f97b58029f5c',
     messagingSenderId: '582262425557',
     projectId: 'tlistserver',
-    authDomain: 'tlistserver.firebaseapp.com',
+    // authDomain: 'tlistserver.firebaseapp.com',
+    authDomain: 'list.novila.xyz',
     storageBucket: 'tlistserver.firebasestorage.app',
     measurementId: 'G-GL9ZWVCBD5',
   );
@@ -69,7 +70,8 @@ class DefaultFirebaseOptions {
     appId: '1:582262425557:web:a2fb9a11a3eb69e6029f5c',
     messagingSenderId: '582262425557',
     projectId: 'tlistserver',
-    authDomain: 'tlistserver.firebaseapp.com',
+    // authDomain: 'tlistserver.firebaseapp.com',
+    authDomain: 'list.novila.xyz',
     storageBucket: 'tlistserver.firebasestorage.app',
     measurementId: 'G-K1HVP6VG7G',
   );

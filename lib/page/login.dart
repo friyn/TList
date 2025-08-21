@@ -3,6 +3,7 @@ import 'package:tlist/page/register.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:tlist/main.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -46,7 +47,11 @@ class _LoginPageState extends State<LoginPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Login berhasil')),
       );
-      Navigator.pop(context);
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const MainScreen()),
+        (route) => false,
+      );
     } on FirebaseAuthException catch (e) {
       final msg = _humanizeAuthError(e.code);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -172,7 +177,11 @@ class _LoginPageState extends State<LoginPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Login Google berhasil')),
       );
-      Navigator.pop(context);
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const MainScreen()),
+        (route) => false,
+      );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -227,10 +236,12 @@ class _LoginPageState extends State<LoginPage> {
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Email',
                     hintText: 'you@example.com',
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                    ),
                     prefixIcon: Icon(Icons.email_outlined),
                   ),
                   validator: (value) {
@@ -249,8 +260,10 @@ class _LoginPageState extends State<LoginPage> {
                   onFieldSubmitted: (_) => _submit(),
                   decoration: InputDecoration(
                     labelText: 'Password',
-                    border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.lock_outline),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    prefixIcon: Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       onPressed: () => setState(() => _obscure = !_obscure),
                       icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
@@ -269,6 +282,9 @@ class _LoginPageState extends State<LoginPage> {
                   onPressed: _submit,
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(25),
+                    ),
                   ),
                   child: const Text('Login'),
                 ),
@@ -283,10 +299,13 @@ class _LoginPageState extends State<LoginPage> {
                   label: const Text('Lanjutkan dengan Google'),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(25),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Divider(),
+                Divider(color: Theme.of(context).dividerColor.withOpacity(0.5)),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -302,7 +321,7 @@ class _LoginPageState extends State<LoginPage> {
                       },
                       child: const Text('Daftar'),
                     ),
-                    const Text(' | '),
+                    Text(' | ', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6))),
                     TextButton(
                       onPressed: _forgotPassword,
                       child: const Text('Lupa password?'),
