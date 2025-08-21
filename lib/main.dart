@@ -1194,8 +1194,8 @@ class TransactionCard extends StatelessWidget {
                   ),
                 ),
                 PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
+                  onTap: onDelete,
+                  child: const Row(
                     children: [
                       Icon(Icons.delete, color: Theme.of(context).colorScheme.error, size: 20),
                       const SizedBox(width: 8),
